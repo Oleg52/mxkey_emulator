@@ -1,10 +1,12 @@
 #define _WIN32_WINNT 0x0400
 
 #include <windows.h>
+#include <objbase.h>
 #include "logging.h"
 #include "winmm_hook.h"
 #include "hook_helper.h"
 #include "emulator_helper.h"
+#include "save_helper.h"
 
 void HookWinscardFunctions();
 
@@ -257,19 +259,28 @@ LONG __stdcall SCardGetStatusChangeA_Hook(SCARDCONTEXT hContext, DWORD dwTimeout
     return SCARD_S_SUCCESS;
 }
 
-typedef BOOL (WINAPI *GetSaveFileNameA_t)(LPOPENFILENAMEA);
-GetSaveFileNameA_t GetSaveFileNameAOrigFunc = NULL;
-
-BOOL __stdcall GetSaveFileNameA_Hook(LPOPENFILENAMEA p)
+BOOL __stdcall GetSaveFileNameA_Hook(LPOPENFILENAMEA lpOpenFileName)
 {
-    BOOL result = FALSE;
-    __try
+    // obfusucator probably corrupted smth on windows 7+
+    // when selecting different folder, app crashes
+    // open file dialog in new process and get result path
+    return CustomGetSaveFileName(lpOpenFileName);
+}
+
+BOOL __stdcall GetOpenFileNameA_Hook(LPOPENFILENAMEA lpOpenFileName)
+{
+    return CustomGetOpenFileName(lpOpenFileName);
+}
+
+typedef BOOL (__stdcall *GetVersionExA_t)(LPOSVERSIONINFOA);
+GetVersionExA_t GetVersionExAOrigFunc = NULL;
+
+BOOL __stdcall GetVersionExA_Hook(LPOSVERSIONINFOA lpVersionInformation)
+{
+    BOOL result = GetVersionExAOrigFunc(lpVersionInformation);
+    if (result)
     {
-        result = GetSaveFileNameAOrigFunc(p); 
-    }
-    __except(EXCEPTION_EXECUTE_HANDLER) // fix for win7, lpstrFile is already populated
-    {
-        result = p->lpstrFile != NULL;
+        lpVersionInformation->dwMajorVersion = 5; // set to windows XP, file dialogs via CoCreateInstance are also broken, force GetSaveFileNameA/GetOpenFileNameA
     }
 
     return result;
@@ -382,11 +393,12 @@ BOOL __stdcall MobileExDllMain_Hook(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID 
     g_HasPatchedVmCheck = TRUE;
     PatchModulesSignatureCheck();
 
-    HMODULE comdlg32 = GetModuleHandleA("comdlg32.dll");
     FuncEntrySignature entryBytes[] = {
         {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
     };
-    HookFunctionWithFallbackSafe(comdlg32, "GetSaveFileNameA", entryBytes, sizeof(entryBytes), (void**)&GetSaveFileNameAOrigFunc , (void*)GetSaveFileNameA_Hook, FALSE);
+    HMODULE comdlg32 = GetModuleHandleA("comdlg32.dll");
+    HookFunctionWithFallbackSafe(comdlg32, "GetSaveFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetSaveFileNameA_Hook, FALSE);
+    HookFunctionWithFallbackSafe(comdlg32, "GetOpenFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetOpenFileNameA_Hook, FALSE);
 
     for (unsigned int i = 0; i < g_WinscardCandidatesCount; i++)
     {
@@ -639,15 +651,18 @@ void InstallHooks()
     if (hModule)
     {
         status.VirtualAlloc = HookFunctionWithFallbackSafe(hModule, "VirtualAlloc", entryBytes, sizeof(entryBytes),
-            (void**)&VirtualAllocOrigKBaseFunc , (void*)VirtualAlloc_KBaseHook, FALSE);
+            (void**)&VirtualAllocOrigKBaseFunc, (void*)VirtualAlloc_KBaseHook, FALSE);
         status.CreateFileA = HookFunctionWithFallbackSafe(hModule, "CreateFileA", entryBytes, sizeof(entryBytes),
             (void**)&CreateFileAKBaseOrigFunc, (void*)CreateFileA_KBaseHook, FALSE);
+        
+        HookFunctionWithFallbackSafe(hModule, "GetVersionExA", entryBytes, sizeof(entryBytes), (void**)&GetVersionExAOrigFunc, (void*)GetVersionExA_Hook, FALSE);
 
         HookKernelFunctions(hModule, &status, TRUE, FALSE);
     }
 
     hModule = GetModuleHandleA("kernel32.dll");
     HookKernelFunctions(hModule, &status, FALSE, TRUE);
+    
 }
 
 void HookKernelFunctions(HMODULE hModule, HookStatus* status, BOOL skipFirst, BOOL errorOnFail)
@@ -722,7 +737,7 @@ BOOL APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
 
 		SetupWinmmFunctions();
         InstallHooks();
-
     }
+
     return TRUE;
 }
