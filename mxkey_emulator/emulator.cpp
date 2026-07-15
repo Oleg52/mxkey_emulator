@@ -290,7 +290,7 @@ void PatchVmCheck()
 {
     if (g_HasPatchedVmCheck) return;
     const BYTE patch[] = {0x33,0xC0};
-    const DWORD offsets[] = {0xF59BE, 0x12E6AD, 0x12E77D, 0x1262B9, 0xF9BD2, 0xFF06A, 0x10C76A}; // offsets for different versions
+    const DWORD offsets[] = {0xF59BE, 0x12E6AD, 0x12E77D, 0x1262B9, 0xF9BD2, 0xFF06A, 0x10C76A, 0x101A19}; // offsets for different versions
 
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++)
     {
@@ -356,7 +356,7 @@ void PatchNokiaSaveRpl()
                 continue;
             }
 
-            const DWORD offsets[] = {0x252CAF, 0x2B92DC, 0x206555};
+            const DWORD offsets[] = {0x252CAF, 0x2475AB, 0x2B92DC, 0x206555};
             for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++)
             {
                 BYTE* patchAddr = addr + offsets[i];
@@ -364,14 +364,28 @@ void PatchNokiaSaveRpl()
                 {
                     memset(patchAddr, 0x90, 6); // nop broken check on rpl save on win7
                     g_HasPatchedNokiaSaveRpl = true;
-                    return;
+                    break;
                 }
                 else if (patchAddr[0] == 0x73 && patchAddr[1] == 0x51) // v3.3
                 {
                     patchAddr[0] = 0xEB;    // force jmp to rpl save
                     g_HasPatchedNokiaSaveRpl = true;
-                    return;
+                    break;
                 }
+            }
+
+            if (g_HasPatchedNokiaSaveRpl) // patch interface check for gen selector on 3.5 rev1.4
+            {
+                BYTE* intfCheck = addr + 0x20FC7C;
+                if (intfCheck[0] == 0x73 && intfCheck[1] == 0x54)
+                {
+                    intfCheck[0] = 0xEB; // jmp to add all options
+                    //memset((BYTE*)(addr + 0x1A5853), 0x90, 10); // nop warning msg box call
+                    BYTE* msgBoxCheck = addr + 0x1A5851;
+                    msgBoxCheck[0] = 0xEB; // skip warning msg box
+                }
+
+                return;
             }
         }
 
@@ -733,7 +747,8 @@ BOOL APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
     if (fdwReason == DLL_PROCESS_ATTACH)
     {
         // sometimes app is stuck on startup, deleting registry helps
-        DeleteRegistryTree(HKEY_CURRENT_USER, "Software\\mobileEx");
+        // moved to bat file
+        // DeleteRegistryTree(HKEY_CURRENT_USER, "Software\\mobileEx");
 
 		SetupWinmmFunctions();
         InstallHooks();
