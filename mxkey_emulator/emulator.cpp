@@ -309,7 +309,7 @@ void PatchVmCheck()
 void PatchModulesSignatureCheck()
 {
     const BYTE patch[] = {0xB0, 0x01, 0xC3};
-    const DWORD offsets[] = {0x1AD020, 0x1852C0}; // for v3.5
+    const DWORD offsets[] = {0x1AD020, 0x19F9A0, 0x1852C0}; // for v3.5
     BYTE* exeBase = (BYTE*)GetModuleHandleA(NULL);
 
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++)
