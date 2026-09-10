@@ -215,215 +215,215 @@ struct winmm_dll {
 } winmm;
 
 extern "C" {
-	void fCloseDriver() { __asm { jmp winmm.oCloseDriver } }
-	void fDefDriverProc() { __asm { jmp winmm.oDefDriverProc } }
-    void fDriverCallback() { __asm { jmp winmm.oDriverCallback } }
-    void fDrvGetModuleHandle() { __asm { jmp winmm.oDrvGetModuleHandle } }
-    void fGetDriverModuleHandle() { __asm { jmp winmm.oGetDriverModuleHandle } }
-    void fMigrateAllDrivers() { __asm { jmp winmm.oMigrateAllDrivers } }
-    void fMigrateSoundEvents() { __asm { jmp winmm.oMigrateSoundEvents } }
-    void fNotifyCallbackData() { __asm { jmp winmm.oNotifyCallbackData } }
-    void fOpenDriver() { __asm { jmp winmm.oOpenDriver } }
-    void fPlaySound() { __asm { jmp winmm.oPlaySound } }
-    void fPlaySoundA() { __asm { jmp winmm.oPlaySoundA } }
-    void fPlaySoundW() { __asm { jmp winmm.oPlaySoundW } }
-    void fSendDriverMessage() { __asm { jmp winmm.oSendDriverMessage } }
-    void fWOW32DriverCallback() { __asm { jmp winmm.oWOW32DriverCallback } }
-    void fWOW32ResolveMultiMediaHandle() { __asm { jmp winmm.oWOW32ResolveMultiMediaHandle } }
-    void fWOWAppExit() { __asm { jmp winmm.oWOWAppExit } }
-    void fWinmmLogoff() { __asm { jmp winmm.oWinmmLogoff } }
-    void fWinmmLogon() { __asm { jmp winmm.oWinmmLogon } }
-    void f_gfxLogoff() { __asm { jmp winmm.o_gfxLogoff } }
-    void f_gfxLogon() { __asm { jmp winmm.o_gfxLogon } }
-    void faux32Message() { __asm { jmp winmm.oaux32Message } }
-    void fauxGetDevCapsA() { __asm { jmp winmm.oauxGetDevCapsA } }
-    void fauxGetDevCapsW() { __asm { jmp winmm.oauxGetDevCapsW } }
-    void fauxGetNumDevs() { __asm { jmp winmm.oauxGetNumDevs } }
-    void fauxGetVolume() { __asm { jmp winmm.oauxGetVolume } }
-    void fauxOutMessage() { __asm { jmp winmm.oauxOutMessage } }
-    void fauxSetVolume() { __asm { jmp winmm.oauxSetVolume } }
-    void fgfxAddGfx() { __asm { jmp winmm.ogfxAddGfx } }
-    void fgfxBatchChange() { __asm { jmp winmm.ogfxBatchChange } }
-    void fgfxCreateGfxFactoriesList() { __asm { jmp winmm.ogfxCreateGfxFactoriesList } }
-    void fgfxCreateZoneFactoriesList() { __asm { jmp winmm.ogfxCreateZoneFactoriesList } }
-    void fgfxDestroyDeviceInterfaceList() { __asm { jmp winmm.ogfxDestroyDeviceInterfaceList } }
-    void fgfxEnumerateGfxs() { __asm { jmp winmm.ogfxEnumerateGfxs } }
-    void fgfxModifyGfx() { __asm { jmp winmm.ogfxModifyGfx } }
-    void fgfxOpenGfx() { __asm { jmp winmm.ogfxOpenGfx } }
-    void fgfxRemoveGfx() { __asm { jmp winmm.ogfxRemoveGfx } }
-    void fjoy32Message() { __asm { jmp winmm.ojoy32Message } }
-    void fjoyConfigChanged() { __asm { jmp winmm.ojoyConfigChanged } }
-    void fjoyGetDevCapsA() { __asm { jmp winmm.ojoyGetDevCapsA } }
-    void fjoyGetDevCapsW() { __asm { jmp winmm.ojoyGetDevCapsW } }
-    void fjoyGetNumDevs() { __asm { jmp winmm.ojoyGetNumDevs } }
-    void fjoyGetPos() { __asm { jmp winmm.ojoyGetPos } }
-    void fjoyGetPosEx() { __asm { jmp winmm.ojoyGetPosEx } }
-    void fjoyGetThreshold() { __asm { jmp winmm.ojoyGetThreshold } }
-    void fjoyReleaseCapture() { __asm { jmp winmm.ojoyReleaseCapture } }
-    void fjoySetCapture() { __asm { jmp winmm.ojoySetCapture } }
-    void fjoySetThreshold() { __asm { jmp winmm.ojoySetThreshold } }
-    void fmci32Message() { __asm { jmp winmm.omci32Message } }
-    void fmciDriverNotify() { __asm { jmp winmm.omciDriverNotify } }
-    void fmciDriverYield() { __asm { jmp winmm.omciDriverYield } }
-    void fmciExecute() { __asm { jmp winmm.omciExecute } }
-    void fmciFreeCommandResource() { __asm { jmp winmm.omciFreeCommandResource } }
-    void fmciGetCreatorTask() { __asm { jmp winmm.omciGetCreatorTask } }
-    void fmciGetDeviceIDA() { __asm { jmp winmm.omciGetDeviceIDA } }
-    void fmciGetDeviceIDFromElementIDA() { __asm { jmp winmm.omciGetDeviceIDFromElementIDA } }
-    void fmciGetDeviceIDFromElementIDW() { __asm { jmp winmm.omciGetDeviceIDFromElementIDW } }
-    void fmciGetDeviceIDW() { __asm { jmp winmm.omciGetDeviceIDW } }
-    void fmciGetDriverData() { __asm { jmp winmm.omciGetDriverData } }
-    void fmciGetErrorStringA() { __asm { jmp winmm.omciGetErrorStringA } }
-    void fmciGetErrorStringW() { __asm { jmp winmm.omciGetErrorStringW } }
-    void fmciGetYieldProc() { __asm { jmp winmm.omciGetYieldProc } }
-    void fmciLoadCommandResource() { __asm { jmp winmm.omciLoadCommandResource } }
-    void fmciSendCommandA() { __asm { jmp winmm.omciSendCommandA } }
-    void fmciSendCommandW() { __asm { jmp winmm.omciSendCommandW } }
-    void fmciSendStringA() { __asm { jmp winmm.omciSendStringA } }
-    void fmciSendStringW() { __asm { jmp winmm.omciSendStringW } }
-    void fmciSetDriverData() { __asm { jmp winmm.omciSetDriverData } }
-    void fmciSetYieldProc() { __asm { jmp winmm.omciSetYieldProc } }
-    void fmid32Message() { __asm { jmp winmm.omid32Message } }
-    void fmidiConnect() { __asm { jmp winmm.omidiConnect } }
-    void fmidiDisconnect() { __asm { jmp winmm.omidiDisconnect } }
-    void fmidiInAddBuffer() { __asm { jmp winmm.omidiInAddBuffer } }
-    void fmidiInClose() { __asm { jmp winmm.omidiInClose } }
-    void fmidiInGetDevCapsA() { __asm { jmp winmm.omidiInGetDevCapsA } }
-    void fmidiInGetDevCapsW() { __asm { jmp winmm.omidiInGetDevCapsW } }
-    void fmidiInGetErrorTextA() { __asm { jmp winmm.omidiInGetErrorTextA } }
-    void fmidiInGetErrorTextW() { __asm { jmp winmm.omidiInGetErrorTextW } }
-    void fmidiInGetID() { __asm { jmp winmm.omidiInGetID } }
-    void fmidiInGetNumDevs() { __asm { jmp winmm.omidiInGetNumDevs } }
-    void fmidiInMessage() { __asm { jmp winmm.omidiInMessage } }
-    void fmidiInOpen() { __asm { jmp winmm.omidiInOpen } }
-    void fmidiInPrepareHeader() { __asm { jmp winmm.omidiInPrepareHeader } }
-    void fmidiInReset() { __asm { jmp winmm.omidiInReset } }
-    void fmidiInStart() { __asm { jmp winmm.omidiInStart } }
-    void fmidiInStop() { __asm { jmp winmm.omidiInStop } }
-    void fmidiInUnprepareHeader() { __asm { jmp winmm.omidiInUnprepareHeader } }
-    void fmidiOutCacheDrumPatches() { __asm { jmp winmm.omidiOutCacheDrumPatches } }
-    void fmidiOutCachePatches() { __asm { jmp winmm.omidiOutCachePatches } }
-    void fmidiOutClose() { __asm { jmp winmm.omidiOutClose } }
-    void fmidiOutGetDevCapsA() { __asm { jmp winmm.omidiOutGetDevCapsA } }
-    void fmidiOutGetDevCapsW() { __asm { jmp winmm.omidiOutGetDevCapsW } }
-    void fmidiOutGetErrorTextA() { __asm { jmp winmm.omidiOutGetErrorTextA } }
-    void fmidiOutGetErrorTextW() { __asm { jmp winmm.omidiOutGetErrorTextW } }
-    void fmidiOutGetID() { __asm { jmp winmm.omidiOutGetID } }
-    void fmidiOutGetNumDevs() { __asm { jmp winmm.omidiOutGetNumDevs } }
-    void fmidiOutGetVolume() { __asm { jmp winmm.omidiOutGetVolume } }
-    void fmidiOutLongMsg() { __asm { jmp winmm.omidiOutLongMsg } }
-    void fmidiOutMessage() { __asm { jmp winmm.omidiOutMessage } }
-    void fmidiOutOpen() { __asm { jmp winmm.omidiOutOpen } }
-    void fmidiOutPrepareHeader() { __asm { jmp winmm.omidiOutPrepareHeader } }
-    void fmidiOutReset() { __asm { jmp winmm.omidiOutReset } }
-    void fmidiOutSetVolume() { __asm { jmp winmm.omidiOutSetVolume } }
-    void fmidiOutShortMsg() { __asm { jmp winmm.omidiOutShortMsg } }
-    void fmidiOutUnprepareHeader() { __asm { jmp winmm.omidiOutUnprepareHeader } }
-    void fmidiStreamClose() { __asm { jmp winmm.omidiStreamClose } }
-    void fmidiStreamOpen() { __asm { jmp winmm.omidiStreamOpen } }
-    void fmidiStreamOut() { __asm { jmp winmm.omidiStreamOut } }
-    void fmidiStreamPause() { __asm { jmp winmm.omidiStreamPause } }
-    void fmidiStreamPosition() { __asm { jmp winmm.omidiStreamPosition } }
-    void fmidiStreamProperty() { __asm { jmp winmm.omidiStreamProperty } }
-    void fmidiStreamRestart() { __asm { jmp winmm.omidiStreamRestart } }
-    void fmidiStreamStop() { __asm { jmp winmm.omidiStreamStop } }
-    void fmixerClose() { __asm { jmp winmm.omixerClose } }
-    void fmixerGetControlDetailsA() { __asm { jmp winmm.omixerGetControlDetailsA } }
-    void fmixerGetControlDetailsW() { __asm { jmp winmm.omixerGetControlDetailsW } }
-    void fmixerGetDevCapsA() { __asm { jmp winmm.omixerGetDevCapsA } }
-    void fmixerGetDevCapsW() { __asm { jmp winmm.omixerGetDevCapsW } }
-    void fmixerGetID() { __asm { jmp winmm.omixerGetID } }
-    void fmixerGetLineControlsA() { __asm { jmp winmm.omixerGetLineControlsA } }
-    void fmixerGetLineControlsW() { __asm { jmp winmm.omixerGetLineControlsW } }
-    void fmixerGetLineInfoA() { __asm { jmp winmm.omixerGetLineInfoA } }
-    void fmixerGetLineInfoW() { __asm { jmp winmm.omixerGetLineInfoW } }
-    void fmixerGetNumDevs() { __asm { jmp winmm.omixerGetNumDevs } }
-    void fmixerMessage() { __asm { jmp winmm.omixerMessage } }
-    void fmixerOpen() { __asm { jmp winmm.omixerOpen } }
-    void fmixerSetControlDetails() { __asm { jmp winmm.omixerSetControlDetails } }
-    void fmmDrvInstall() { __asm { jmp winmm.ommDrvInstall } }
-    void fmmGetCurrentTask() { __asm { jmp winmm.ommGetCurrentTask } }
-    void fmmTaskBlock() { __asm { jmp winmm.ommTaskBlock } }
-    void fmmTaskCreate() { __asm { jmp winmm.ommTaskCreate } }
-    void fmmTaskSignal() { __asm { jmp winmm.ommTaskSignal } }
-    void fmmTaskYield() { __asm { jmp winmm.ommTaskYield } }
-    void fmmioAdvance() { __asm { jmp winmm.ommioAdvance } }
-    void fmmioAscend() { __asm { jmp winmm.ommioAscend } }
-    void fmmioClose() { __asm { jmp winmm.ommioClose } }
-    void fmmioCreateChunk() { __asm { jmp winmm.ommioCreateChunk } }
-    void fmmioDescend() { __asm { jmp winmm.ommioDescend } }
-    void fmmioFlush() { __asm { jmp winmm.ommioFlush } }
-    void fmmioGetInfo() { __asm { jmp winmm.ommioGetInfo } }
-    void fmmioInstallIOProcA() { __asm { jmp winmm.ommioInstallIOProcA } }
-    void fmmioInstallIOProcW() { __asm { jmp winmm.ommioInstallIOProcW } }
-    void fmmioOpenA() { __asm { jmp winmm.ommioOpenA } }
-    void fmmioOpenW() { __asm { jmp winmm.ommioOpenW } }
-    void fmmioRead() { __asm { jmp winmm.ommioRead } }
-    void fmmioRenameA() { __asm { jmp winmm.ommioRenameA } }
-    void fmmioRenameW() { __asm { jmp winmm.ommioRenameW } }
-    void fmmioSeek() { __asm { jmp winmm.ommioSeek } }
-    void fmmioSendMessage() { __asm { jmp winmm.ommioSendMessage } }
-    void fmmioSetBuffer() { __asm { jmp winmm.ommioSetBuffer } }
-    void fmmioSetInfo() { __asm { jmp winmm.ommioSetInfo } }
-    void fmmioStringToFOURCCA() { __asm { jmp winmm.ommioStringToFOURCCA } }
-    void fmmioStringToFOURCCW() { __asm { jmp winmm.ommioStringToFOURCCW } }
-    void fmmioWrite() { __asm { jmp winmm.ommioWrite } }
-    void fmmsystemGetVersion() { __asm { jmp winmm.ommsystemGetVersion } }
-    void fmod32Message() { __asm { jmp winmm.omod32Message } }
-    void fmxd32Message() { __asm { jmp winmm.omxd32Message } }
-    void fsndPlaySoundA() { __asm { jmp winmm.osndPlaySoundA } }
-    void fsndPlaySoundW() { __asm { jmp winmm.osndPlaySoundW } }
-    void ftid32Message() { __asm { jmp winmm.otid32Message } }
-    void ftimeBeginPeriod() { __asm { jmp winmm.otimeBeginPeriod } }
-    void ftimeEndPeriod() { __asm { jmp winmm.otimeEndPeriod } }
-    void ftimeGetDevCaps() { __asm { jmp winmm.otimeGetDevCaps } }
-    void ftimeGetSystemTime() { __asm { jmp winmm.otimeGetSystemTime } }
-    void ftimeGetTime() { __asm { jmp winmm.otimeGetTime } }
-    void ftimeKillEvent() { __asm { jmp winmm.otimeKillEvent } }
-    void ftimeSetEvent() { __asm { jmp winmm.otimeSetEvent } }
-    void fwaveInAddBuffer() { __asm { jmp winmm.owaveInAddBuffer } }
-    void fwaveInClose() { __asm { jmp winmm.owaveInClose } }
-    void fwaveInGetDevCapsA() { __asm { jmp winmm.owaveInGetDevCapsA } }
-    void fwaveInGetDevCapsW() { __asm { jmp winmm.owaveInGetDevCapsW } }
-    void fwaveInGetErrorTextA() { __asm { jmp winmm.owaveInGetErrorTextA } }
-    void fwaveInGetErrorTextW() { __asm { jmp winmm.owaveInGetErrorTextW } }
-    void fwaveInGetID() { __asm { jmp winmm.owaveInGetID } }
-    void fwaveInGetNumDevs() { __asm { jmp winmm.owaveInGetNumDevs } }
-    void fwaveInGetPosition() { __asm { jmp winmm.owaveInGetPosition } }
-    void fwaveInMessage() { __asm { jmp winmm.owaveInMessage } }
-    void fwaveInOpen() { __asm { jmp winmm.owaveInOpen } }
-    void fwaveInPrepareHeader() { __asm { jmp winmm.owaveInPrepareHeader } }
-    void fwaveInReset() { __asm { jmp winmm.owaveInReset } }
-    void fwaveInStart() { __asm { jmp winmm.owaveInStart } }
-    void fwaveInStop() { __asm { jmp winmm.owaveInStop } }
-    void fwaveInUnprepareHeader() { __asm { jmp winmm.owaveInUnprepareHeader } }
-    void fwaveOutBreakLoop() { __asm { jmp winmm.owaveOutBreakLoop } }
-    void fwaveOutClose() { __asm { jmp winmm.owaveOutClose } }
-    void fwaveOutGetDevCapsA() { __asm { jmp winmm.owaveOutGetDevCapsA } }
-    void fwaveOutGetDevCapsW() { __asm { jmp winmm.owaveOutGetDevCapsW } }
-    void fwaveOutGetErrorTextA() { __asm { jmp winmm.owaveOutGetErrorTextA } }
-    void fwaveOutGetErrorTextW() { __asm { jmp winmm.owaveOutGetErrorTextW } }
-    void fwaveOutGetID() { __asm { jmp winmm.owaveOutGetID } }
-    void fwaveOutGetNumDevs() { __asm { jmp winmm.owaveOutGetNumDevs } }
-    void fwaveOutGetPitch() { __asm { jmp winmm.owaveOutGetPitch } }
-    void fwaveOutGetPlaybackRate() { __asm { jmp winmm.owaveOutGetPlaybackRate } }
-    void fwaveOutGetPosition() { __asm { jmp winmm.owaveOutGetPosition } }
-    void fwaveOutGetVolume() { __asm { jmp winmm.owaveOutGetVolume } }
-    void fwaveOutMessage() { __asm { jmp winmm.owaveOutMessage } }
-    void fwaveOutOpen() { __asm { jmp winmm.owaveOutOpen } }
-    void fwaveOutPause() { __asm { jmp winmm.owaveOutPause } }
-    void fwaveOutPrepareHeader() { __asm { jmp winmm.owaveOutPrepareHeader } }
-    void fwaveOutReset() { __asm { jmp winmm.owaveOutReset } }
-    void fwaveOutRestart() { __asm { jmp winmm.owaveOutRestart } }
-    void fwaveOutSetPitch() { __asm { jmp winmm.owaveOutSetPitch } }
-    void fwaveOutSetPlaybackRate() { __asm { jmp winmm.owaveOutSetPlaybackRate } }
-    void fwaveOutSetVolume() { __asm { jmp winmm.owaveOutSetVolume } }
-    void fwaveOutUnprepareHeader() { __asm { jmp winmm.owaveOutUnprepareHeader } }
-    void fwaveOutWrite() { __asm { jmp winmm.owaveOutWrite } }
-    void fwid32Message() { __asm { jmp winmm.owid32Message } }
-    void fwinmmDbgOut() { __asm { jmp winmm.owinmmDbgOut } }
-    void fwinmmSetDebugLevel() { __asm { jmp winmm.owinmmSetDebugLevel } }
-    void fwod32Message() { __asm { jmp winmm.owod32Message } }
+	__declspec(naked) void fCloseDriver() { __asm { jmp winmm.oCloseDriver } }
+	__declspec(naked) void fDefDriverProc() { __asm { jmp winmm.oDefDriverProc } }
+	__declspec(naked) void fDriverCallback() { __asm { jmp winmm.oDriverCallback } }
+	__declspec(naked) void fDrvGetModuleHandle() { __asm { jmp winmm.oDrvGetModuleHandle } }
+	__declspec(naked) void fGetDriverModuleHandle() { __asm { jmp winmm.oGetDriverModuleHandle } }
+	__declspec(naked) void fMigrateAllDrivers() { __asm { jmp winmm.oMigrateAllDrivers } }
+	__declspec(naked) void fMigrateSoundEvents() { __asm { jmp winmm.oMigrateSoundEvents } }
+	__declspec(naked) void fNotifyCallbackData() { __asm { jmp winmm.oNotifyCallbackData } }
+	__declspec(naked) void fOpenDriver() { __asm { jmp winmm.oOpenDriver } }
+	__declspec(naked) void fPlaySound() { __asm { jmp winmm.oPlaySound } }
+	__declspec(naked) void fPlaySoundA() { __asm { jmp winmm.oPlaySoundA } }
+	__declspec(naked) void fPlaySoundW() { __asm { jmp winmm.oPlaySoundW } }
+	__declspec(naked) void fSendDriverMessage() { __asm { jmp winmm.oSendDriverMessage } }
+	__declspec(naked) void fWOW32DriverCallback() { __asm { jmp winmm.oWOW32DriverCallback } }
+	__declspec(naked) void fWOW32ResolveMultiMediaHandle() { __asm { jmp winmm.oWOW32ResolveMultiMediaHandle } }
+	__declspec(naked) void fWOWAppExit() { __asm { jmp winmm.oWOWAppExit } }
+	__declspec(naked) void fWinmmLogoff() { __asm { jmp winmm.oWinmmLogoff } }
+	__declspec(naked) void fWinmmLogon() { __asm { jmp winmm.oWinmmLogon } }
+	__declspec(naked) void f_gfxLogoff() { __asm { jmp winmm.o_gfxLogoff } }
+	__declspec(naked) void f_gfxLogon() { __asm { jmp winmm.o_gfxLogon } }
+	__declspec(naked) void faux32Message() { __asm { jmp winmm.oaux32Message } }
+	__declspec(naked) void fauxGetDevCapsA() { __asm { jmp winmm.oauxGetDevCapsA } }
+	__declspec(naked) void fauxGetDevCapsW() { __asm { jmp winmm.oauxGetDevCapsW } }
+	__declspec(naked) void fauxGetNumDevs() { __asm { jmp winmm.oauxGetNumDevs } }
+	__declspec(naked) void fauxGetVolume() { __asm { jmp winmm.oauxGetVolume } }
+	__declspec(naked) void fauxOutMessage() { __asm { jmp winmm.oauxOutMessage } }
+	__declspec(naked) void fauxSetVolume() { __asm { jmp winmm.oauxSetVolume } }
+	__declspec(naked) void fgfxAddGfx() { __asm { jmp winmm.ogfxAddGfx } }
+	__declspec(naked) void fgfxBatchChange() { __asm { jmp winmm.ogfxBatchChange } }
+	__declspec(naked) void fgfxCreateGfxFactoriesList() { __asm { jmp winmm.ogfxCreateGfxFactoriesList } }
+	__declspec(naked) void fgfxCreateZoneFactoriesList() { __asm { jmp winmm.ogfxCreateZoneFactoriesList } }
+	__declspec(naked) void fgfxDestroyDeviceInterfaceList() { __asm { jmp winmm.ogfxDestroyDeviceInterfaceList } }
+	__declspec(naked) void fgfxEnumerateGfxs() { __asm { jmp winmm.ogfxEnumerateGfxs } }
+	__declspec(naked) void fgfxModifyGfx() { __asm { jmp winmm.ogfxModifyGfx } }
+	__declspec(naked) void fgfxOpenGfx() { __asm { jmp winmm.ogfxOpenGfx } }
+	__declspec(naked) void fgfxRemoveGfx() { __asm { jmp winmm.ogfxRemoveGfx } }
+	__declspec(naked) void fjoy32Message() { __asm { jmp winmm.ojoy32Message } }
+	__declspec(naked) void fjoyConfigChanged() { __asm { jmp winmm.ojoyConfigChanged } }
+	__declspec(naked) void fjoyGetDevCapsA() { __asm { jmp winmm.ojoyGetDevCapsA } }
+	__declspec(naked) void fjoyGetDevCapsW() { __asm { jmp winmm.ojoyGetDevCapsW } }
+	__declspec(naked) void fjoyGetNumDevs() { __asm { jmp winmm.ojoyGetNumDevs } }
+	__declspec(naked) void fjoyGetPos() { __asm { jmp winmm.ojoyGetPos } }
+	__declspec(naked) void fjoyGetPosEx() { __asm { jmp winmm.ojoyGetPosEx } }
+	__declspec(naked) void fjoyGetThreshold() { __asm { jmp winmm.ojoyGetThreshold } }
+	__declspec(naked) void fjoyReleaseCapture() { __asm { jmp winmm.ojoyReleaseCapture } }
+	__declspec(naked) void fjoySetCapture() { __asm { jmp winmm.ojoySetCapture } }
+	__declspec(naked) void fjoySetThreshold() { __asm { jmp winmm.ojoySetThreshold } }
+	__declspec(naked) void fmci32Message() { __asm { jmp winmm.omci32Message } }
+	__declspec(naked) void fmciDriverNotify() { __asm { jmp winmm.omciDriverNotify } }
+	__declspec(naked) void fmciDriverYield() { __asm { jmp winmm.omciDriverYield } }
+	__declspec(naked) void fmciExecute() { __asm { jmp winmm.omciExecute } }
+	__declspec(naked) void fmciFreeCommandResource() { __asm { jmp winmm.omciFreeCommandResource } }
+	__declspec(naked) void fmciGetCreatorTask() { __asm { jmp winmm.omciGetCreatorTask } }
+	__declspec(naked) void fmciGetDeviceIDA() { __asm { jmp winmm.omciGetDeviceIDA } }
+	__declspec(naked) void fmciGetDeviceIDFromElementIDA() { __asm { jmp winmm.omciGetDeviceIDFromElementIDA } }
+	__declspec(naked) void fmciGetDeviceIDFromElementIDW() { __asm { jmp winmm.omciGetDeviceIDFromElementIDW } }
+	__declspec(naked) void fmciGetDeviceIDW() { __asm { jmp winmm.omciGetDeviceIDW } }
+	__declspec(naked) void fmciGetDriverData() { __asm { jmp winmm.omciGetDriverData } }
+	__declspec(naked) void fmciGetErrorStringA() { __asm { jmp winmm.omciGetErrorStringA } }
+	__declspec(naked) void fmciGetErrorStringW() { __asm { jmp winmm.omciGetErrorStringW } }
+	__declspec(naked) void fmciGetYieldProc() { __asm { jmp winmm.omciGetYieldProc } }
+	__declspec(naked) void fmciLoadCommandResource() { __asm { jmp winmm.omciLoadCommandResource } }
+	__declspec(naked) void fmciSendCommandA() { __asm { jmp winmm.omciSendCommandA } }
+	__declspec(naked) void fmciSendCommandW() { __asm { jmp winmm.omciSendCommandW } }
+	__declspec(naked) void fmciSendStringA() { __asm { jmp winmm.omciSendStringA } }
+	__declspec(naked) void fmciSendStringW() { __asm { jmp winmm.omciSendStringW } }
+	__declspec(naked) void fmciSetDriverData() { __asm { jmp winmm.omciSetDriverData } }
+	__declspec(naked) void fmciSetYieldProc() { __asm { jmp winmm.omciSetYieldProc } }
+	__declspec(naked) void fmid32Message() { __asm { jmp winmm.omid32Message } }
+	__declspec(naked) void fmidiConnect() { __asm { jmp winmm.omidiConnect } }
+	__declspec(naked) void fmidiDisconnect() { __asm { jmp winmm.omidiDisconnect } }
+	__declspec(naked) void fmidiInAddBuffer() { __asm { jmp winmm.omidiInAddBuffer } }
+	__declspec(naked) void fmidiInClose() { __asm { jmp winmm.omidiInClose } }
+	__declspec(naked) void fmidiInGetDevCapsA() { __asm { jmp winmm.omidiInGetDevCapsA } }
+	__declspec(naked) void fmidiInGetDevCapsW() { __asm { jmp winmm.omidiInGetDevCapsW } }
+	__declspec(naked) void fmidiInGetErrorTextA() { __asm { jmp winmm.omidiInGetErrorTextA } }
+	__declspec(naked) void fmidiInGetErrorTextW() { __asm { jmp winmm.omidiInGetErrorTextW } }
+	__declspec(naked) void fmidiInGetID() { __asm { jmp winmm.omidiInGetID } }
+	__declspec(naked) void fmidiInGetNumDevs() { __asm { jmp winmm.omidiInGetNumDevs } }
+	__declspec(naked) void fmidiInMessage() { __asm { jmp winmm.omidiInMessage } }
+	__declspec(naked) void fmidiInOpen() { __asm { jmp winmm.omidiInOpen } }
+	__declspec(naked) void fmidiInPrepareHeader() { __asm { jmp winmm.omidiInPrepareHeader } }
+	__declspec(naked) void fmidiInReset() { __asm { jmp winmm.omidiInReset } }
+	__declspec(naked) void fmidiInStart() { __asm { jmp winmm.omidiInStart } }
+	__declspec(naked) void fmidiInStop() { __asm { jmp winmm.omidiInStop } }
+	__declspec(naked) void fmidiInUnprepareHeader() { __asm { jmp winmm.omidiInUnprepareHeader } }
+	__declspec(naked) void fmidiOutCacheDrumPatches() { __asm { jmp winmm.omidiOutCacheDrumPatches } }
+	__declspec(naked) void fmidiOutCachePatches() { __asm { jmp winmm.omidiOutCachePatches } }
+	__declspec(naked) void fmidiOutClose() { __asm { jmp winmm.omidiOutClose } }
+	__declspec(naked) void fmidiOutGetDevCapsA() { __asm { jmp winmm.omidiOutGetDevCapsA } }
+	__declspec(naked) void fmidiOutGetDevCapsW() { __asm { jmp winmm.omidiOutGetDevCapsW } }
+	__declspec(naked) void fmidiOutGetErrorTextA() { __asm { jmp winmm.omidiOutGetErrorTextA } }
+	__declspec(naked) void fmidiOutGetErrorTextW() { __asm { jmp winmm.omidiOutGetErrorTextW } }
+	__declspec(naked) void fmidiOutGetID() { __asm { jmp winmm.omidiOutGetID } }
+	__declspec(naked) void fmidiOutGetNumDevs() { __asm { jmp winmm.omidiOutGetNumDevs } }
+	__declspec(naked) void fmidiOutGetVolume() { __asm { jmp winmm.omidiOutGetVolume } }
+	__declspec(naked) void fmidiOutLongMsg() { __asm { jmp winmm.omidiOutLongMsg } }
+	__declspec(naked) void fmidiOutMessage() { __asm { jmp winmm.omidiOutMessage } }
+	__declspec(naked) void fmidiOutOpen() { __asm { jmp winmm.omidiOutOpen } }
+	__declspec(naked) void fmidiOutPrepareHeader() { __asm { jmp winmm.omidiOutPrepareHeader } }
+	__declspec(naked) void fmidiOutReset() { __asm { jmp winmm.omidiOutReset } }
+	__declspec(naked) void fmidiOutSetVolume() { __asm { jmp winmm.omidiOutSetVolume } }
+	__declspec(naked) void fmidiOutShortMsg() { __asm { jmp winmm.omidiOutShortMsg } }
+	__declspec(naked) void fmidiOutUnprepareHeader() { __asm { jmp winmm.omidiOutUnprepareHeader } }
+	__declspec(naked) void fmidiStreamClose() { __asm { jmp winmm.omidiStreamClose } }
+	__declspec(naked) void fmidiStreamOpen() { __asm { jmp winmm.omidiStreamOpen } }
+	__declspec(naked) void fmidiStreamOut() { __asm { jmp winmm.omidiStreamOut } }
+	__declspec(naked) void fmidiStreamPause() { __asm { jmp winmm.omidiStreamPause } }
+	__declspec(naked) void fmidiStreamPosition() { __asm { jmp winmm.omidiStreamPosition } }
+	__declspec(naked) void fmidiStreamProperty() { __asm { jmp winmm.omidiStreamProperty } }
+	__declspec(naked) void fmidiStreamRestart() { __asm { jmp winmm.omidiStreamRestart } }
+	__declspec(naked) void fmidiStreamStop() { __asm { jmp winmm.omidiStreamStop } }
+	__declspec(naked) void fmixerClose() { __asm { jmp winmm.omixerClose } }
+	__declspec(naked) void fmixerGetControlDetailsA() { __asm { jmp winmm.omixerGetControlDetailsA } }
+	__declspec(naked) void fmixerGetControlDetailsW() { __asm { jmp winmm.omixerGetControlDetailsW } }
+	__declspec(naked) void fmixerGetDevCapsA() { __asm { jmp winmm.omixerGetDevCapsA } }
+	__declspec(naked) void fmixerGetDevCapsW() { __asm { jmp winmm.omixerGetDevCapsW } }
+	__declspec(naked) void fmixerGetID() { __asm { jmp winmm.omixerGetID } }
+	__declspec(naked) void fmixerGetLineControlsA() { __asm { jmp winmm.omixerGetLineControlsA } }
+	__declspec(naked) void fmixerGetLineControlsW() { __asm { jmp winmm.omixerGetLineControlsW } }
+	__declspec(naked) void fmixerGetLineInfoA() { __asm { jmp winmm.omixerGetLineInfoA } }
+	__declspec(naked) void fmixerGetLineInfoW() { __asm { jmp winmm.omixerGetLineInfoW } }
+	__declspec(naked) void fmixerGetNumDevs() { __asm { jmp winmm.omixerGetNumDevs } }
+	__declspec(naked) void fmixerMessage() { __asm { jmp winmm.omixerMessage } }
+	__declspec(naked) void fmixerOpen() { __asm { jmp winmm.omixerOpen } }
+	__declspec(naked) void fmixerSetControlDetails() { __asm { jmp winmm.omixerSetControlDetails } }
+	__declspec(naked) void fmmDrvInstall() { __asm { jmp winmm.ommDrvInstall } }
+	__declspec(naked) void fmmGetCurrentTask() { __asm { jmp winmm.ommGetCurrentTask } }
+	__declspec(naked) void fmmTaskBlock() { __asm { jmp winmm.ommTaskBlock } }
+	__declspec(naked) void fmmTaskCreate() { __asm { jmp winmm.ommTaskCreate } }
+	__declspec(naked) void fmmTaskSignal() { __asm { jmp winmm.ommTaskSignal } }
+	__declspec(naked) void fmmTaskYield() { __asm { jmp winmm.ommTaskYield } }
+	__declspec(naked) void fmmioAdvance() { __asm { jmp winmm.ommioAdvance } }
+	__declspec(naked) void fmmioAscend() { __asm { jmp winmm.ommioAscend } }
+	__declspec(naked) void fmmioClose() { __asm { jmp winmm.ommioClose } }
+	__declspec(naked) void fmmioCreateChunk() { __asm { jmp winmm.ommioCreateChunk } }
+	__declspec(naked) void fmmioDescend() { __asm { jmp winmm.ommioDescend } }
+	__declspec(naked) void fmmioFlush() { __asm { jmp winmm.ommioFlush } }
+	__declspec(naked) void fmmioGetInfo() { __asm { jmp winmm.ommioGetInfo } }
+	__declspec(naked) void fmmioInstallIOProcA() { __asm { jmp winmm.ommioInstallIOProcA } }
+	__declspec(naked) void fmmioInstallIOProcW() { __asm { jmp winmm.ommioInstallIOProcW } }
+	__declspec(naked) void fmmioOpenA() { __asm { jmp winmm.ommioOpenA } }
+	__declspec(naked) void fmmioOpenW() { __asm { jmp winmm.ommioOpenW } }
+	__declspec(naked) void fmmioRead() { __asm { jmp winmm.ommioRead } }
+	__declspec(naked) void fmmioRenameA() { __asm { jmp winmm.ommioRenameA } }
+	__declspec(naked) void fmmioRenameW() { __asm { jmp winmm.ommioRenameW } }
+	__declspec(naked) void fmmioSeek() { __asm { jmp winmm.ommioSeek } }
+	__declspec(naked) void fmmioSendMessage() { __asm { jmp winmm.ommioSendMessage } }
+	__declspec(naked) void fmmioSetBuffer() { __asm { jmp winmm.ommioSetBuffer } }
+	__declspec(naked) void fmmioSetInfo() { __asm { jmp winmm.ommioSetInfo } }
+	__declspec(naked) void fmmioStringToFOURCCA() { __asm { jmp winmm.ommioStringToFOURCCA } }
+	__declspec(naked) void fmmioStringToFOURCCW() { __asm { jmp winmm.ommioStringToFOURCCW } }
+	__declspec(naked) void fmmioWrite() { __asm { jmp winmm.ommioWrite } }
+	__declspec(naked) void fmmsystemGetVersion() { __asm { jmp winmm.ommsystemGetVersion } }
+	__declspec(naked) void fmod32Message() { __asm { jmp winmm.omod32Message } }
+	__declspec(naked) void fmxd32Message() { __asm { jmp winmm.omxd32Message } }
+	__declspec(naked) void fsndPlaySoundA() { __asm { jmp winmm.osndPlaySoundA } }
+	__declspec(naked) void fsndPlaySoundW() { __asm { jmp winmm.osndPlaySoundW } }
+	__declspec(naked) void ftid32Message() { __asm { jmp winmm.otid32Message } }
+	__declspec(naked) void ftimeBeginPeriod() { __asm { jmp winmm.otimeBeginPeriod } }
+	__declspec(naked) void ftimeEndPeriod() { __asm { jmp winmm.otimeEndPeriod } }
+	__declspec(naked) void ftimeGetDevCaps() { __asm { jmp winmm.otimeGetDevCaps } }
+	__declspec(naked) void ftimeGetSystemTime() { __asm { jmp winmm.otimeGetSystemTime } }
+	__declspec(naked) void ftimeGetTime() { __asm { jmp winmm.otimeGetTime } }
+	__declspec(naked) void ftimeKillEvent() { __asm { jmp winmm.otimeKillEvent } }
+	__declspec(naked) void ftimeSetEvent() { __asm { jmp winmm.otimeSetEvent } }
+	__declspec(naked) void fwaveInAddBuffer() { __asm { jmp winmm.owaveInAddBuffer } }
+	__declspec(naked) void fwaveInClose() { __asm { jmp winmm.owaveInClose } }
+	__declspec(naked) void fwaveInGetDevCapsA() { __asm { jmp winmm.owaveInGetDevCapsA } }
+	__declspec(naked) void fwaveInGetDevCapsW() { __asm { jmp winmm.owaveInGetDevCapsW } }
+	__declspec(naked) void fwaveInGetErrorTextA() { __asm { jmp winmm.owaveInGetErrorTextA } }
+	__declspec(naked) void fwaveInGetErrorTextW() { __asm { jmp winmm.owaveInGetErrorTextW } }
+	__declspec(naked) void fwaveInGetID() { __asm { jmp winmm.owaveInGetID } }
+	__declspec(naked) void fwaveInGetNumDevs() { __asm { jmp winmm.owaveInGetNumDevs } }
+	__declspec(naked) void fwaveInGetPosition() { __asm { jmp winmm.owaveInGetPosition } }
+	__declspec(naked) void fwaveInMessage() { __asm { jmp winmm.owaveInMessage } }
+	__declspec(naked) void fwaveInOpen() { __asm { jmp winmm.owaveInOpen } }
+	__declspec(naked) void fwaveInPrepareHeader() { __asm { jmp winmm.owaveInPrepareHeader } }
+	__declspec(naked) void fwaveInReset() { __asm { jmp winmm.owaveInReset } }
+	__declspec(naked) void fwaveInStart() { __asm { jmp winmm.owaveInStart } }
+	__declspec(naked) void fwaveInStop() { __asm { jmp winmm.owaveInStop } }
+	__declspec(naked) void fwaveInUnprepareHeader() { __asm { jmp winmm.owaveInUnprepareHeader } }
+	__declspec(naked) void fwaveOutBreakLoop() { __asm { jmp winmm.owaveOutBreakLoop } }
+	__declspec(naked) void fwaveOutClose() { __asm { jmp winmm.owaveOutClose } }
+	__declspec(naked) void fwaveOutGetDevCapsA() { __asm { jmp winmm.owaveOutGetDevCapsA } }
+	__declspec(naked) void fwaveOutGetDevCapsW() { __asm { jmp winmm.owaveOutGetDevCapsW } }
+	__declspec(naked) void fwaveOutGetErrorTextA() { __asm { jmp winmm.owaveOutGetErrorTextA } }
+	__declspec(naked) void fwaveOutGetErrorTextW() { __asm { jmp winmm.owaveOutGetErrorTextW } }
+	__declspec(naked) void fwaveOutGetID() { __asm { jmp winmm.owaveOutGetID } }
+	__declspec(naked) void fwaveOutGetNumDevs() { __asm { jmp winmm.owaveOutGetNumDevs } }
+	__declspec(naked) void fwaveOutGetPitch() { __asm { jmp winmm.owaveOutGetPitch } }
+	__declspec(naked) void fwaveOutGetPlaybackRate() { __asm { jmp winmm.owaveOutGetPlaybackRate } }
+	__declspec(naked) void fwaveOutGetPosition() { __asm { jmp winmm.owaveOutGetPosition } }
+	__declspec(naked) void fwaveOutGetVolume() { __asm { jmp winmm.owaveOutGetVolume } }
+	__declspec(naked) void fwaveOutMessage() { __asm { jmp winmm.owaveOutMessage } }
+	__declspec(naked) void fwaveOutOpen() { __asm { jmp winmm.owaveOutOpen } }
+	__declspec(naked) void fwaveOutPause() { __asm { jmp winmm.owaveOutPause } }
+	__declspec(naked) void fwaveOutPrepareHeader() { __asm { jmp winmm.owaveOutPrepareHeader } }
+	__declspec(naked) void fwaveOutReset() { __asm { jmp winmm.owaveOutReset } }
+	__declspec(naked) void fwaveOutRestart() { __asm { jmp winmm.owaveOutRestart } }
+	__declspec(naked) void fwaveOutSetPitch() { __asm { jmp winmm.owaveOutSetPitch } }
+	__declspec(naked) void fwaveOutSetPlaybackRate() { __asm { jmp winmm.owaveOutSetPlaybackRate } }
+	__declspec(naked) void fwaveOutSetVolume() { __asm { jmp winmm.owaveOutSetVolume } }
+	__declspec(naked) void fwaveOutUnprepareHeader() { __asm { jmp winmm.owaveOutUnprepareHeader } }
+	__declspec(naked) void fwaveOutWrite() { __asm { jmp winmm.owaveOutWrite } }
+	__declspec(naked) void fwid32Message() { __asm { jmp winmm.owid32Message } }
+	__declspec(naked) void fwinmmDbgOut() { __asm { jmp winmm.owinmmDbgOut } }
+	__declspec(naked) void fwinmmSetDebugLevel() { __asm { jmp winmm.owinmmSetDebugLevel } }
+	__declspec(naked) void fwod32Message() { __asm { jmp winmm.owod32Message } }
 }
 
 void SetupWinmmFunctions() {

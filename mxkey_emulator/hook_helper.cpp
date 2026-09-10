@@ -4,6 +4,20 @@
 
 static const char* DLL_MAIN_FUNC_NAME = "DllMain";
 
+void ShowErrorMessageAndTerminate(const char* format, const char* funcName)
+{
+    char buffer[256];
+    wsprintfA(buffer, format, funcName);
+    MessageBoxA(NULL, buffer, "Error", MB_OK | MB_ICONERROR);
+    TerminateProcess(GetCurrentProcess(), 1);
+}
+
+void ShowBadDriverErrorAndTerminateIfTrue(BOOL enabled, const char* funcName)
+{
+    if (!enabled) return;
+    ShowErrorMessageAndTerminate("Bad driver. GetProcAddress failed for function %s", funcName);
+}
+
 BOOL IsMemoryReadable(HMODULE hModule)
 {
     MEMORY_BASIC_INFORMATION mbi;
@@ -35,11 +49,11 @@ BYTE* GetAddressOfEntryPoint(HMODULE hModule)
     BYTE* base = (BYTE*)hModule;
 
     IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) // "MZ"
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE)
         return NULL;
 
     IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) // "PE\0\0"
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
         return NULL;
 
     return (BYTE*)hModule + nt->OptionalHeader.AddressOfEntryPoint;
@@ -59,60 +73,185 @@ BYTE* CustomGetProcAddress(HMODULE hModule, const char* funcName)
 
     BYTE* base = (BYTE*)hModule;
 
-    // 1. DOS header sits at the very start of the image.
     IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) // "MZ"
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE)
         return NULL;
 
-    // 2. e_lfanew is the offset (from base) to the NT headers.
     IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) // "PE\0\0"
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
         return NULL;
 
-    // 3. Grab the export directory's RVA from the data directory.
     IMAGE_DATA_DIRECTORY expDir =
         nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     if (expDir.VirtualAddress == 0)
-        return NULL; // no exports
+        return NULL;
 
     IMAGE_EXPORT_DIRECTORY* exports =
         (IMAGE_EXPORT_DIRECTORY*)(base + expDir.VirtualAddress);
 
-    // 4. Three parallel arrays, all stored as RVAs:
-    DWORD* nameRVAs   = (DWORD*)(base + exports->AddressOfNames);        // char* names
-    WORD*  ordinals   = (WORD*) (base + exports->AddressOfNameOrdinals); // name -> func index
-    DWORD* funcRVAs   = (DWORD*)(base + exports->AddressOfFunctions);    // func addresses
+    DWORD* nameRVAs   = (DWORD*)(base + exports->AddressOfNames);
+    WORD*  ordinals   = (WORD*) (base + exports->AddressOfNameOrdinals);
+    DWORD* funcRVAs   = (DWORD*)(base + exports->AddressOfFunctions);
 
-    // 5. Linear search the name table.
     for (DWORD i = 0; i < exports->NumberOfNames; i++) {
         const char* name = (const char*)(base + nameRVAs[i]);
         if (strcmp(name, funcName) == 0) {
-            WORD  ordinal  = ordinals[i];          // index into funcRVAs
+            WORD  ordinal  = ordinals[i];
             DWORD funcRVA  = funcRVAs[ordinal];
             BYTE* funcAddr = base + funcRVA;
 
-            // 6. Forwarder check: if the RVA points back inside the export
-            //    directory, it's a forwarder string ("NTDLL.RtlExitUserThread"),
-            //    not real code. GetProcAddress would resolve it further.
             if (funcRVA >= expDir.VirtualAddress &&
                 funcRVA <  expDir.VirtualAddress + expDir.Size) {
-                // funcAddr is a "DllName.FunctionName" string here.
-                return NULL; // (or recurse: LoadLibrary + resolve the target)
+                return NULL;
             }
 
             return funcAddr;
         }
     }
 
-    return NULL; // not found
+    return NULL;
 }
 
-void ShowErrorMessageAndTerminate(const char* format, const char* funcName)
+BOOL IatHookFunction(const char* moduleName, const char* funcName, void** origFuncPtr, void* destHookFuncPtr, BOOL terminateOnFail)
 {
-    char buffer[256];
-    wsprintfA(buffer, format, funcName);
-    MessageBoxA(NULL, buffer, "Error", MB_OK | MB_ICONERROR);
-    TerminateProcess(GetCurrentProcess(), 1);
+    BYTE* base = (BYTE*)GetModuleHandleA(NULL);
+
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    IMAGE_DATA_DIRECTORY importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (importDir.Size == 0)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    PIMAGE_IMPORT_DESCRIPTOR import =
+        (PIMAGE_IMPORT_DESCRIPTOR)(base + importDir.VirtualAddress);
+
+    for(;import->Name; import++)
+    {
+        if (strcmp((const char*)(base + import->Name), moduleName) != 0)
+        {
+            continue;
+        }
+
+        PIMAGE_THUNK_DATA origFirstThunk = (PIMAGE_THUNK_DATA)(base + import->OriginalFirstThunk);
+        PIMAGE_THUNK_DATA firstThunk = (PIMAGE_THUNK_DATA)(base + import->FirstThunk);
+
+        for (;origFirstThunk->u1.AddressOfData != 0; origFirstThunk++, firstThunk++)
+        {
+            if (origFirstThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG)
+            {
+                continue;
+            }
+
+            PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(base + (DWORD)origFirstThunk->u1.AddressOfData);
+            if (strcmp((const char*)importByName->Name, funcName) != 0)
+            {
+                continue;
+            }
+
+            DWORD oldProtect;
+            if (!VirtualProtect(&firstThunk->u1.Function, sizeof(LPVOID), PAGE_READWRITE, &oldProtect))
+            {
+                ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+                return FALSE;
+            }
+
+            if (origFuncPtr)
+            {
+                *origFuncPtr = (void*)firstThunk->u1.Function;
+            }
+
+            firstThunk->u1.Function = (DWORD*)destHookFuncPtr;
+            VirtualProtect(&firstThunk->u1.Function, sizeof(LPVOID), oldProtect, &oldProtect);
+            return TRUE;
+        }
+    }
+
+    ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+    return FALSE;
+}
+
+BOOL EatHookFunction(HMODULE hModule, const char* funcName, void** origFuncPtr, void* destHookFuncPtr, BOOL terminateOnFail)
+{
+    BYTE* base = (BYTE*)hModule;
+
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    IMAGE_DATA_DIRECTORY expDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (expDir.VirtualAddress == 0)
+    {
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+        return FALSE;
+    }
+
+    IMAGE_EXPORT_DIRECTORY* exports = (IMAGE_EXPORT_DIRECTORY*)(base + expDir.VirtualAddress);
+
+    DWORD* nameRVAs = (DWORD*)(base + exports->AddressOfNames);
+    WORD* ordinals = (WORD*)(base + exports->AddressOfNameOrdinals);
+    DWORD* funcRVAs = (DWORD*)(base + exports->AddressOfFunctions);
+
+    for (DWORD i = 0; i < exports->NumberOfNames; i++)
+    {
+        const char* name = (const char*)(base + nameRVAs[i]);
+        if (strcmp(name, funcName) != 0)
+        {
+            continue;
+        }
+
+        WORD ordinal = ordinals[i];
+        DWORD funcRVA = funcRVAs[ordinal];
+        BYTE* origFuncAddr = base + funcRVA;
+
+        if (funcRVA >= expDir.VirtualAddress &&
+            funcRVA <  expDir.VirtualAddress + expDir.Size) {
+            return NULL;
+        }
+
+        DWORD oldProtect;
+        if (!VirtualProtect(&funcRVAs[ordinal], sizeof(DWORD), PAGE_READWRITE, &oldProtect))
+        {
+            ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+            return FALSE;
+        }
+
+        if (origFuncPtr)
+        {
+            *origFuncPtr = (void*)origFuncAddr;
+        }
+
+        funcRVAs[ordinal] = (DWORD)destHookFuncPtr - (DWORD)hModule;
+        VirtualProtect(&funcRVAs[ordinal], sizeof(DWORD), oldProtect, &oldProtect);
+        return TRUE;
+    }
+
+    ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+    return FALSE;
 }
 
 BOOL HookFunction(HMODULE hModule, const char* funcName, BYTE* origFuncEntryBytes,
@@ -124,8 +263,7 @@ BOOL HookFunction(HMODULE hModule, const char* funcName, BYTE* origFuncEntryByte
     BYTE* targetFunc = CustomGetProcAddress(hModule, funcName);
     if (!targetFunc)
     {
-        if (terminateOnFail)
-            ShowErrorMessageAndTerminate("Bad driver. GetProcAddress failed for function %s", funcName);
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
         return FALSE;
     }
 
