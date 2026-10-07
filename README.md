@@ -4,6 +4,8 @@ This project emulates MXKEY smartcard for mobileEx software.
 
 Since server is long dead and smartcards have counter(when it reaches 0 software can't be used), emulation is the only fix for it. 
 
+MXKEY application is available on [GDrive](https://drive.google.com/file/d/11gC7HQBfWaNcIQaWZQ8v7YvMYowpTJZk/view) (password 1)
+
 ## Build Environment
 
 This project is built using Microsoft Visual Studio 6.0 (VS6).
