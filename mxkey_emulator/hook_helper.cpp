@@ -140,6 +140,7 @@ BOOL IatHookFunction(const char* moduleName, const char* funcName, void** origFu
     PIMAGE_IMPORT_DESCRIPTOR import =
         (PIMAGE_IMPORT_DESCRIPTOR)(base + importDir.VirtualAddress);
 
+    BOOL hasHooked = FALSE;
     for(;import->Name; import++)
     {
         if (strcmp((const char*)(base + import->Name), moduleName) != 0)
@@ -177,12 +178,13 @@ BOOL IatHookFunction(const char* moduleName, const char* funcName, void** origFu
 
             firstThunk->u1.Function = (DWORD*)destHookFuncPtr;
             VirtualProtect(&firstThunk->u1.Function, sizeof(LPVOID), oldProtect, &oldProtect);
-            return TRUE;
+            hasHooked = TRUE;
         }
     }
 
-    ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
-    return FALSE;
+    if (!hasHooked)
+        ShowBadDriverErrorAndTerminateIfTrue(terminateOnFail, funcName);
+    return hasHooked;
 }
 
 BOOL EatHookFunction(HMODULE hModule, const char* funcName, void** origFuncPtr, void* destHookFuncPtr, BOOL terminateOnFail)

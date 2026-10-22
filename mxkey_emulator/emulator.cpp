@@ -2,11 +2,13 @@
 
 #include <windows.h>
 #include <objbase.h>
+#include <time.h>
 #include "logging.h"
 #include "winmm_hook.h"
 #include "hook_helper.h"
 #include "emulator_helper.h"
 #include "save_helper.h"
+#include "buffers.h"
 
 void HookWinscardFunctions();
 
@@ -53,16 +55,19 @@ typedef struct _TIME_FIELDS {
   SHORT Weekday;
 } TIME_FIELDS;
 
-typedef struct {
-    BOOL    VirtualAlloc;
-    BOOL    CreateFileA;
-    BOOL    GetLocalTime;
-    BOOL    GetSystemTime;
-    BOOL    GetSystemTimeAsFileTime;
-    BOOL    GlobalMemoryStatus;
-} HookStatus;
-
-void HookKernelFunctions(HMODULE hModule, HookStatus* status, BOOL skipFirst, BOOL errorOnFail);
+typedef struct _VerInfo {
+  ULONG  dwOSVersionInfoSize;
+  ULONG  dwMajorVersion;
+  ULONG  dwMinorVersion;
+  ULONG  dwBuildNumber;
+  ULONG  dwPlatformId;
+  WCHAR  szCSDVersion[128];
+  USHORT wServicePackMajor;
+  USHORT wServicePackMinor;
+  USHORT wSuiteMask;
+  UCHAR  wProductType;
+  UCHAR  wReserved;
+} *PRTL_OSVERSIONINFOW;
 
 #define SCARD_S_SUCCESS             0x00000000
 #define SCARD_E_COMM_DATA_LOST      0x8010002F
@@ -85,11 +90,32 @@ static FuncEntrySignature g_MobileExDllMainEntrySigs[] = {
 static DWORD g_AllocCount = 0;
 static BOOL g_HasHookedMobileExDll = FALSE;
 static BOOL g_HasPatchedVmCheck = FALSE;
+static BOOL g_HasPatchedNokiaUfsJaf = FALSE;
 static BOOL g_HasPatchedNokiaSaveRpl = FALSE;
 
 static BOOL g_CollectWinscardCandidates = FALSE;
 static BYTE* g_WinscardCandidates[50];
 static DWORD g_WinscardCandidatesCount;
+
+static BOOL g_IsOnNewerWindows = FALSE;
+
+BOOL StringIContains(LPCSTR str, LPCSTR search)
+{
+    if(!str || !search) return NULL;
+    size_t searchLen = strlen(search);
+    for(; *str; str++)
+        if(strnicmp(str, search, searchLen) == 0) return TRUE;
+    return FALSE;
+}
+
+BOOL WStringIContains(LPCWSTR str, LPCWSTR search)
+{
+    if(!str || !search) return NULL;
+    size_t searchLen = wcslen(search);
+    for(; *str; str++)
+        if(wcsnicmp(str, search, searchLen) == 0) return TRUE;
+    return FALSE;
+}
 
 LONG WriteMultiStringA(const char* data, DWORD dataLen, LPSTR mszOut, LPDWORD pcchOut)
 {
@@ -272,20 +298,6 @@ BOOL __stdcall GetOpenFileNameA_Hook(LPOPENFILENAMEA lpOpenFileName)
     return CustomGetOpenFileName(lpOpenFileName);
 }
 
-typedef BOOL (__stdcall *GetVersionExA_t)(LPOSVERSIONINFOA);
-GetVersionExA_t GetVersionExAOrigFunc = NULL;
-
-BOOL __stdcall GetVersionExA_Hook(LPOSVERSIONINFOA lpVersionInformation)
-{
-    BOOL result = GetVersionExAOrigFunc(lpVersionInformation);
-    if (result)
-    {
-        lpVersionInformation->dwMajorVersion = 5; // set to windows XP, file dialogs via CoCreateInstance are also broken, force GetSaveFileNameA/GetOpenFileNameA
-    }
-
-    return result;
-}
-
 void PatchVmCheck()
 {
     if (g_HasPatchedVmCheck) return;
@@ -301,6 +313,38 @@ void PatchVmCheck()
             g_HasPatchedVmCheck = TRUE;
             return;
         }
+    }
+
+    return;    
+}
+
+// return missing ufs/jaf init code for rev 2.7
+void PatchNokiaUfsJaf()
+{
+    if (g_HasPatchedNokiaUfsJaf) return;
+
+    BYTE* jmpToUfsRegionAddr = g_MobileExDllBase + 0x18BA65;
+    BYTE* jmpToJafRegionAddr = g_MobileExDllBase + 0x18BAD5;
+
+    if (jmpToUfsRegionAddr[0] == 0xBA && jmpToUfsRegionAddr[1] == 0x3 &&
+        jmpToJafRegionAddr[0] == 0xBA && jmpToJafRegionAddr[1] == 0x19)
+    {
+        BYTE* ufsRegionAddr = g_MobileExDllBase + 0x5820AC;
+        BYTE* jafRegionAddr = g_MobileExDllBase + 0x5823DC;
+
+        DWORD oldProtect;
+        VirtualProtect(ufsRegionAddr, sizeof(UFS_REGION), PAGE_EXECUTE_READWRITE, &oldProtect);
+        VirtualProtect(jafRegionAddr, sizeof(JAF_REGION), PAGE_EXECUTE_READWRITE, &oldProtect);
+        memcpy(ufsRegionAddr, UFS_REGION, sizeof(UFS_REGION));
+        memcpy(jafRegionAddr, JAF_REGION, sizeof(JAF_REGION));
+
+        BYTE jmpToUfsRegion[] = {0xE9,0x42,0x66,0x3F,0x00};
+        BYTE jmpToJafRegion[] = {0xE9,0x02,0x69,0x3F,0x00};
+
+        memcpy(jmpToUfsRegionAddr, jmpToUfsRegion, sizeof(jmpToUfsRegion));
+        memcpy(jmpToJafRegionAddr, jmpToJafRegion, sizeof(jmpToJafRegion));
+
+        g_HasPatchedNokiaUfsJaf = TRUE;
     }
 
     return;    
@@ -374,14 +418,21 @@ void PatchNokiaSaveRpl()
                 }
             }
 
-            if (g_HasPatchedNokiaSaveRpl) // patch interface check for gen selector on 3.5 rev1.4
+            if (g_HasPatchedNokiaSaveRpl) // patch interface check for gen selector on 3.5
             {
                 BYTE* intfCheck = addr + 0x20FC7C;
-                if (intfCheck[0] == 0x73 && intfCheck[1] == 0x54)
+                if (intfCheck[0] == 0x73 && intfCheck[1] == 0x54) // for 1.4
                 {
                     intfCheck[0] = 0xEB; // jmp to add all options
-                    //memset((BYTE*)(addr + 0x1A5853), 0x90, 10); // nop warning msg box call
                     BYTE* msgBoxCheck = addr + 0x1A5851;
+                    msgBoxCheck[0] = 0xEB; // skip warning msg box
+                }
+
+                intfCheck = addr + 0x279446;
+                if (intfCheck[0] == 0x73 && intfCheck[1] == 0x54) // for 2.7
+                {
+                    intfCheck[0] = 0xEB; // jmp to add all options
+                    BYTE* msgBoxCheck = addr + 0x200E66;
                     msgBoxCheck[0] = 0xEB; // skip warning msg box
                 }
 
@@ -405,14 +456,15 @@ BOOL __stdcall MobileExDllMain_Hook(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID 
     BOOL result = MobileExDllMainOrigFunc(hinstDLL, fdwReason, lpReserved);
     g_CollectWinscardCandidates = FALSE;
     g_HasPatchedVmCheck = TRUE;
+    g_HasPatchedNokiaUfsJaf = TRUE;
     PatchModulesSignatureCheck();
 
-    FuncEntrySignature entryBytes[] = {
-        {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
-    };
-    HMODULE comdlg32 = GetModuleHandleA("comdlg32.dll");
-    HookFunctionWithFallbackSafe(comdlg32, "GetSaveFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetSaveFileNameA_Hook, FALSE);
-    HookFunctionWithFallbackSafe(comdlg32, "GetOpenFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetOpenFileNameA_Hook, FALSE);
+    // FuncEntrySignature entryBytes[] = {
+    //     {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
+    // };
+    // HMODULE comdlg32 = GetModuleHandleA("comdlg32.dll");
+    // HookFunctionWithFallbackSafe(comdlg32, "GetSaveFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetSaveFileNameA_Hook, FALSE);
+    // HookFunctionWithFallbackSafe(comdlg32, "GetOpenFileNameA", entryBytes, sizeof(entryBytes), NULL, (void*)GetOpenFileNameA_Hook, FALSE);
 
     for (unsigned int i = 0; i < g_WinscardCandidatesCount; i++)
     {
@@ -436,17 +488,17 @@ BOOL __stdcall MobileExDllMain_Hook(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID 
     return result;
 }
 
-typedef LPVOID (__stdcall *VirtualAlloc_t)(LPVOID, SIZE_T, DWORD, DWORD);
-VirtualAlloc_t VirtualAllocOrigKBaseFunc = NULL;
-VirtualAlloc_t VirtualAllocOrigK32Func = NULL;
+typedef LPVOID (WINAPI *VirtualAlloc_t)(LPVOID, SIZE_T, DWORD, DWORD);
+VirtualAlloc_t VirtualAllocOrigFunc = NULL;
 
-void VirtualAlloc_Hook(LPVOID lpAddress, SIZE_T dwSize)
+void VirtualAlloc_HookImpl(LPVOID lpAddress, SIZE_T dwSize)
 {
     // LogToFile("VirtualAllocOrigFunc: %p / %X", lpAddress, dwSize);
 
     if (g_HasHookedMobileExDll)
     {
         PatchVmCheck();
+        PatchNokiaUfsJaf();
         PatchNokiaSaveRpl();
 
         if (g_CollectWinscardCandidates && lpAddress)
@@ -488,16 +540,10 @@ void VirtualAlloc_Hook(LPVOID lpAddress, SIZE_T dwSize)
     }
 }
 
-LPVOID __stdcall VirtualAlloc_K32Hook(LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect)
+LPVOID __stdcall VirtualAlloc_Hook(LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect)
 {
-    VirtualAlloc_Hook(lpAddress, dwSize);
-    return VirtualAllocOrigK32Func(lpAddress, dwSize, flAllocationType, flProtect);
-}
-
-LPVOID __stdcall VirtualAlloc_KBaseHook(LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect)
-{
-    VirtualAlloc_Hook(lpAddress, dwSize);
-    return VirtualAllocOrigKBaseFunc(lpAddress, dwSize, flAllocationType, flProtect);
+    VirtualAlloc_HookImpl(lpAddress, dwSize);
+    return VirtualAllocOrigFunc(lpAddress, dwSize, flAllocationType, flProtect);
 }
 
 static FuncEntrySignature g_SCardFallbackBytes[] =
@@ -527,6 +573,26 @@ void HookWinscardFunctions()
     HookSCardFunction((void**)&SCardGetStatusChangeAOrigFunc, (void*)SCardGetStatusChangeA_Hook, "SCardGetStatusChangeA");
 }
 
+typedef BOOL (WINAPI *GetVersionExA_t)(LPOSVERSIONINFOA);
+GetVersionExA_t GetVersionExAOrigFunc = NULL;
+
+BOOL WINAPI GetVersionExA_Hook(LPOSVERSIONINFOA lpVersionInformation)
+{
+    if (!g_IsOnNewerWindows)
+    {
+        return GetVersionExAOrigFunc(lpVersionInformation);
+    }
+
+    // windows 7
+    lpVersionInformation->dwMajorVersion = 6; // 5 - xp
+    lpVersionInformation->dwMinorVersion = 1;
+    lpVersionInformation->dwBuildNumber = 7600;
+    lpVersionInformation->dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    lpVersionInformation->dwPlatformId = 2;
+    strcpy(lpVersionInformation->szCSDVersion, "Service Pack 1");
+    return TRUE;
+}
+
 typedef LONG (NTAPI *NtQuerySystemTime_t)(PLARGE_INTEGER);
 NtQuerySystemTime_t NtQuerySystemTimeOrigFunc = NULL;
 
@@ -537,219 +603,591 @@ LONG NTAPI NtQuerySystemTime_Hook(PLARGE_INTEGER SystemTime)
     return result;
 }
 
-void __stdcall GetLocalTime_Hook(LPSYSTEMTIME t)
+void WINAPI GetLocalTime_Hook(LPSYSTEMTIME t)
 {
     t->wYear=2010; t->wMonth=5; t->wDayOfWeek=5; t->wDay=5;
     t->wHour=12; t->wMinute=12; t->wSecond=12; t->wMilliseconds=12;
 }
 
-void __stdcall GetSystemTime_Hook(LPSYSTEMTIME t)
+void WINAPI GetSystemTime_Hook(LPSYSTEMTIME t)
 {
     t->wYear=2010; t->wMonth=5; t->wDayOfWeek=5; t->wDay=5;
     t->wHour=12; t->wMinute=12; t->wSecond=12; t->wMilliseconds=12;
 }
 
-void __stdcall GetSystemTimeAsFileTime_Hook(LPFILETIME ft)
+void WINAPI GetSystemTimeAsFileTime_Hook(LPFILETIME ft)
 {
     ft->dwLowDateTime=0x11111111;
     ft->dwHighDateTime=0x01C00000;
 }
 
-void __stdcall GlobalMemoryStatus_Hook(LPMEMORYSTATUS s)
+void WINAPI GlobalMemoryStatus_Hook(LPMEMORYSTATUS s)
 {
-    s->dwLength = sizeof(MEMORYSTATUS);
-    s->dwMemoryLoad = 50;
-    s->dwTotalPhys = 0x80000000;
-    s->dwAvailPhys = 0x40000000;
-    s->dwTotalPageFile = 0x80000000;
-    s->dwAvailPageFile = 0x40000000;
-    s->dwTotalVirtual = 0x7FFF0000;
-    s->dwAvailVirtual = 0x40000000;
+    s->dwLength = sizeof(MEMORYSTATUS); s->dwMemoryLoad = 50; s->dwTotalPhys = 0x80000000; s->dwAvailPhys = 0x40000000;
+    s->dwTotalPageFile = 0x80000000; s->dwAvailPageFile = 0x40000000; s->dwTotalVirtual = 0x7FFF0000; s->dwAvailVirtual = 0x40000000;
 }
 
-typedef void (__stdcall *RtlTimeToTimeFields_t)(PLARGE_INTEGER, TIME_FIELDS*);
+typedef void (NTAPI *RtlTimeToTimeFields_t)(PLARGE_INTEGER, TIME_FIELDS*);
 RtlTimeToTimeFields_t RtlTimeToTimeFieldsOrigFunc = NULL;
-
-void __stdcall RtlTimeToTimeFields_Hook(PLARGE_INTEGER Time, TIME_FIELDS* TimeFields)
+void NTAPI RtlTimeToTimeFields_Hook(PLARGE_INTEGER Time, TIME_FIELDS* TimeFields)
 {
     RtlTimeToTimeFieldsOrigFunc(Time, TimeFields);
-    if (TimeFields && TimeFields->Year > 2020) // fix app expired error
+    if (TimeFields && TimeFields->Year >= 2010) // fix app expired error
     {
-        TimeFields->Year = 2010;
-        TimeFields->Month = 5;
-        TimeFields->Day = 5;
-        TimeFields->Weekday = 5;
-        TimeFields->Hour = 12;
-        TimeFields->Minute = 12;
-        TimeFields->Second = 12;
-        TimeFields->Milliseconds = 12;
+        TimeFields->Year = 2010; TimeFields->Month = 5; TimeFields->Day = 5; TimeFields->Weekday = 5;
+        TimeFields->Hour = 12; TimeFields->Minute = 12; TimeFields->Second = 12; TimeFields->Milliseconds = 12;
     }
 }
 
-// case-insensitive
-BOOL StringContains(LPCSTR str, LPCSTR search)
+BOOL IsRawDiskA(LPCSTR fileName) // mxkey can wipe disk when it detects duplicated responses in a row, just to be safe
 {
-    if(!str || !search)
+    if(!fileName) return FALSE;
+    return StringIContains(fileName, "PHYSICALDRIVE") || StringIContains(fileName, "\\Harddisk");
+}
+BOOL IsRawDiskW(LPCWSTR fileName)
+{
+    if(!fileName) return FALSE;
+    return WStringIContains(fileName, L"PHYSICALDRIVE") || WStringIContains(fileName, L"\\Harddisk");
+}
+
+typedef HANDLE (WINAPI *CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+CreateFileA_t CreateFileAOrigFunc = NULL;
+
+HANDLE WINAPI CreateFileA_Hook(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile)
+{
+    if(IsRawDiskA(lpFileName))
     {
-        return NULL;
+        return INVALID_HANDLE_VALUE;
     }
 
-    size_t searchLen = strlen(search);
-    for(; *str; str++)
+    HANDLE result = CreateFileAOrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+        dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+    
+    //if (lpFileName && strcmp(lpFileName, "C:\\dump_info.txt") != 0)
+    //{
+    //    LogToFile("CreateFileA_Hook: %x : %s", result, lpFileName);
+    //}
+
+    return result;
+}
+
+typedef HANDLE (WINAPI *CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+CreateFileW_t CreateFileWOrigFunc = NULL;
+
+HANDLE WINAPI CreateFileW_Hook(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile)
+{
+    if(IsRawDiskW(lpFileName))
     {
-        if(_strnicmp(str, search, searchLen) == 0)
+        return INVALID_HANDLE_VALUE;
+    }
+
+    HANDLE result = CreateFileWOrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+        dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+
+    LogToFileW(L"CreateFileW_Hook: %x : %s", result, lpFileName);
+    return result;
+}
+
+static LPSTR g_CmdLineA;
+static LPWSTR g_CmdLineW;
+
+LPSTR WINAPI GetCommandLineA_Hook()
+{
+    return g_CmdLineA;
+}
+
+LPWSTR WINAPI GetCommandLineW_Hook()
+{
+    return g_CmdLineW;
+}
+
+BYTE g_LastWriteBuff[2000];
+DWORD g_LastWriteBuffLength = 0;
+
+typedef BOOL (WINAPI *ReadFile_t)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+ReadFile_t ReadFileOrigFunc = NULL;
+
+BOOL WINAPI ReadFile_Hook(
+    HANDLE       hFile,
+    LPVOID       lpBuffer,
+    DWORD        nNumberOfBytesToRead,
+    LPDWORD      lpNumberOfBytesRead,
+    LPOVERLAPPED lpOverlapped
+)
+{
+    BOOL result = ReadFileOrigFunc(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
+    if (nNumberOfBytesToRead < 1024)
+    {
+        if (g_LastWriteBuffLength > 0)
+        {
+            LogBufferToFile("WriteFile", g_LastWriteBuff, g_LastWriteBuffLength);
+            g_LastWriteBuffLength = 0;
+        }
+
+        LogBufferToFile("ReadFile", lpBuffer, nNumberOfBytesToRead);
+    }
+    
+    return result;
+}
+
+typedef BOOL (WINAPI *WriteFile_t)(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED);
+WriteFile_t WriteFileOrigFunc = NULL;
+
+BOOL WINAPI WriteFile_Hook(
+    HANDLE       hFile,
+    LPCVOID      lpBuffer,
+    DWORD        nNumberOfBytesToWrite,
+    LPDWORD      lpNumberOfBytesWritten,
+    LPOVERLAPPED lpOverlapped
+)
+{
+    BOOL result = WriteFileOrigFunc(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
+    if (lpBuffer && nNumberOfBytesToWrite < 1024)
+    {
+        memcpy(g_LastWriteBuff, lpBuffer, nNumberOfBytesToWrite);
+        g_LastWriteBuffLength = nNumberOfBytesToWrite;
+    }
+
+    return result;
+}
+
+BOOL IsZeroBuffer(BYTE* InBuffer, DWORD length)
+{
+    for (DWORD i = 0; i < length; i++)
+    {
+        if (InBuffer[i] != 0) return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL g_IsUsingUfsFtdiDrivers = FALSE;
+typedef BOOL (WINAPI *DeviceIoControl_t)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+DeviceIoControl_t DeviceIoControlOrigFunc = NULL;
+
+BOOL IsBufferContainsString(BYTE* buffer, DWORD bufferLength, const char* search, DWORD searchLength)
+{
+    if (bufferLength < searchLength) return FALSE;
+    for (DWORD i = 0; i < bufferLength - searchLength; i++)
+    {
+        if (memcmp(buffer + i, search, searchLength) == 0)
         {
             return TRUE;
-        }    
+        }
     }
 
     return FALSE;
 }
 
-BOOL IsRawDisk(LPCSTR fileName) // mxkey can wipe disk when it detects duplicated responses in a row, just to be safe
+BOOL WINAPI DeviceIoControl_Hook(
+    HANDLE hDevice,
+    DWORD IoControlCode,
+    LPVOID InBuffer,
+    DWORD InBufferSize,
+    LPVOID OutBuffer,
+    DWORD OutBufferSize,
+    LPDWORD BytesReturned,
+    LPOVERLAPPED Overlapped
+)
 {
-    if(!fileName) return FALSE;
-    return StringContains(fileName, "PHYSICALDRIVE") || StringContains(fileName, "\\Harddisk");
-}
-
-typedef HANDLE (WINAPI *CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
-CreateFileA_t CreateFileAKBaseOrigFunc = NULL;
-CreateFileA_t CreateFileAK32OrigFunc = NULL;
-
-HANDLE WINAPI CreateFileA_KBaseHook(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
-    LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
-    HANDLE hTemplateFile)
-{
-    if(IsRawDisk(lpFileName))
+    if (g_IsUsingUfsFtdiDrivers && IoControlCode != 0x220408 && (IoControlCode & 0xFFFF0000) == 0x00220000)
     {
-        return INVALID_HANDLE_VALUE;
+        IoControlCode |= 0x2000;
     }
 
-    return CreateFileAKBaseOrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
-        dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-}
+    LogToFile("Device IO Control IoControlCode: dev: %x 0x%x", hDevice, IoControlCode);
+    //if (!IsZeroBuffer((BYTE*)InBuffer, InBufferSize))
+    //    LogBufferToFile("Device IO Control InBuffer", InBuffer, InBufferSize);
 
-HANDLE WINAPI CreateFileA_K32Hook(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
-    LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
-    HANDLE hTemplateFile)
-{
-    if(IsRawDisk(lpFileName))
+    BOOL result = DeviceIoControlOrigFunc(hDevice, IoControlCode, InBuffer, InBufferSize, OutBuffer,
+        OutBufferSize, BytesReturned, Overlapped);
+
+    // generic ftdi drivers require 13th bit to be set
+    if (!g_IsUsingUfsFtdiDrivers && IoControlCode == 0x220198 && (!result || IsZeroBuffer((BYTE*)OutBuffer, *BytesReturned)))
     {
-        return INVALID_HANDLE_VALUE;
+        result = DeviceIoControlOrigFunc(hDevice, 0x222198, InBuffer, InBufferSize, OutBuffer,
+        OutBufferSize, BytesReturned, Overlapped);
+
+        if (!result || *BytesReturned == 0) return FALSE;
+        const char* sarasStr = "SarasSoft";
+        if (IsBufferContainsString((BYTE*)OutBuffer, *BytesReturned, sarasStr, sizeof(sarasStr)))
+        {
+            g_IsUsingUfsFtdiDrivers = TRUE;
+        }
     }
 
-    return CreateFileAK32OrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
-        dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+    if (!result)
+        return result;
+
+    //if (BytesReturned && !IsZeroBuffer((BYTE*)OutBuffer, *BytesReturned))
+    //    LogBufferToFile("Device IO Control OutBuffer", OutBuffer, *BytesReturned);
+
+    return result;
+}
+
+const char KEY_PREFIX[] = "SYSTEM\\CurrentControlSet\\Enum\\USB\\";
+const char GUID_DEVINTERFACE_USB_HUB[] = "{f18a0e88-c30c-11d0-8815-00a0c906bed8}";
+char g_LastDevice[MAX_PATH];
+
+typedef LONG (WINAPI *RegOpenKeyExA_t)(HKEY, LPCSTR, DWORD, REGSAM, PHKEY);
+RegOpenKeyExA_t RegOpenKeyExAOrigFunc = NULL;
+
+LONG WINAPI RegOpenKeyExA_Hook(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult)
+{
+    LONG result = RegOpenKeyExAOrigFunc(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    if (result == 0 && lpSubKey && strlen(lpSubKey) > sizeof(KEY_PREFIX) && strnicmp(lpSubKey, KEY_PREFIX, sizeof(KEY_PREFIX) - 1) == 0)
+    {
+        const char* lastSeparator = strrchr(lpSubKey, '\\');
+        const char* deviceStart = lpSubKey + sizeof(KEY_PREFIX) - 5;
+        int length = lastSeparator - deviceStart;
+        strncpy(g_LastDevice, deviceStart, length);
+        g_LastDevice[length] = '\0';
+    }
+
+    LogToFile("RegOpenKeyExA_Hook: res 0x%x / %s", result, lpSubKey);
+    return result;
+}
+
+typedef LONG (WINAPI *RegQueryValueExA_t)(HKEY, LPCSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
+RegQueryValueExA_t RegQueryValueExAOrigFunc = NULL;
+
+LONG WINAPI RegQueryValueExA_Hook(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData)
+{
+    LONG result = RegQueryValueExAOrigFunc(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    // fix for usb3 hub
+    if (result != 0 && lpValueName && strcmp(lpValueName, "SymbolicName") == 0)
+    {
+        *lpType = REG_SZ;
+        char tmpBuffer[MAX_PATH];
+        char* output = (char*)lpData;
+        if (!lpData) output = tmpBuffer;
+        strcpy(output, "\\??\\");
+        int i = 0;
+        for (; g_LastDevice[i]; i++)
+        {
+            output[i + 4] = g_LastDevice[i] == '\\' ? '#' : g_LastDevice[i];
+        }
+
+        output[i + 4] = '#';
+        strcpy(output + i + 5, GUID_DEVINTERFACE_USB_HUB);
+        *lpcbData = strlen(output) + 1;
+        result = 0;
+    }
+
+    LogToFile("RegQueryValueExA_Hook: res 0x%x / %s", result, lpValueName);
+    return result;
+}
+
+LONG WINAPI WinVerifyTrust_Hook(HWND hwnd, GUID *pgActionID, LPVOID pWVTData)
+{
+    return 0;
+}
+
+void* g_LastAlloc = NULL;
+const int g_AllocSize = 4096;
+int g_UsedSize = 0;
+const int g_JmpLength = 11;
+const int g_JmpAddressOffset = 7;
+
+// packer checks first byte of function and scans for ret instruction
+// if function is too long it crashes
+// create small trampoline so it passes checks
+BYTE* CreateJmpPatch()
+{
+    VirtualAlloc_t virtulAllocFunc = VirtualAllocOrigFunc ? VirtualAllocOrigFunc : VirtualAlloc;
+    if (!g_LastAlloc)
+    {
+        g_LastAlloc = virtulAllocFunc(NULL, g_AllocSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    }
+    else if (g_UsedSize + g_JmpLength > g_AllocSize)
+    {
+        g_LastAlloc = virtulAllocFunc(NULL, g_AllocSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        g_UsedSize = 0;
+    }
+
+    BYTE* mem = (BYTE*)g_LastAlloc + g_UsedSize;
+    mem[0] = 0xFF;
+    mem[1] = 0x25;
+    *(DWORD*)(mem + 2) = (DWORD)(mem + g_JmpAddressOffset);
+    mem[6] = 0xC3;
+
+    g_UsedSize += g_JmpLength;
+    return mem;
+}
+
+static DWORD GetProcAddressOrHooked(LPCSTR module, HMODULE hModule, LPCSTR funcName)
+{
+    FARPROC originalFunc = GetProcAddress(hModule, funcName);
+    if (stricmp(module, "kernel32.dll") == 0)
+    {
+        if (strcmp(funcName, "GetSystemTimeAsFileTime") == 0)
+        {
+            return (DWORD)GetSystemTimeAsFileTime_Hook;
+        }
+        if (strcmp(funcName, "GetVersionExA") == 0)
+        {
+            GetVersionExAOrigFunc = (GetVersionExA_t)originalFunc;
+            return (DWORD)GetVersionExA_Hook;
+        }
+        if (strcmp(funcName, "GetSystemTime") == 0)
+        {
+            return (DWORD)GetSystemTime_Hook;
+        }
+        if (strcmp(funcName, "GetLocalTime") == 0)
+        {
+            return (DWORD)GetLocalTime_Hook;
+        }
+        if (strcmp(funcName, "GlobalMemoryStatus") == 0)
+        {
+            return (DWORD)GlobalMemoryStatus_Hook;
+        }
+        if (strcmp(funcName, "GetCommandLineA") == 0)
+        {
+            return (DWORD)GetCommandLineA_Hook;
+        }
+        if (strcmp(funcName, "GetCommandLineW") == 0)
+        {
+            return (DWORD)GetCommandLineW_Hook;
+        }
+        if (strcmp(funcName, "VirtualAlloc") == 0)
+        {
+            VirtualAllocOrigFunc = (VirtualAlloc_t)originalFunc;
+            return (DWORD)VirtualAlloc_Hook;
+        }
+        if (strcmp(funcName, "CreateFileA") == 0)
+        {
+            CreateFileAOrigFunc = (CreateFileA_t)originalFunc;
+            return (DWORD)CreateFileA_Hook;
+        }
+        if (strcmp(funcName, "CreateFileW") == 0)
+        {
+            CreateFileWOrigFunc = (CreateFileW_t)originalFunc;
+            return (DWORD)CreateFileW_Hook;
+        }
+        /*if (strcmp(funcName, "ReadFile") == 0)
+        {
+            ReadFileOrigFunc = (ReadFile_t)originalFunc;
+            return (DWORD)ReadFile_Hook;
+        }
+        if (strcmp(funcName, "WriteFile") == 0)
+        {
+            WriteFileOrigFunc = (WriteFile_t)originalFunc;
+            return (DWORD)WriteFile_Hook;
+        }*/
+        if (strcmp(funcName, "DeviceIoControl") == 0)
+        {
+            DeviceIoControlOrigFunc = (DeviceIoControl_t)originalFunc;
+            return (DWORD)DeviceIoControl_Hook;
+        }
+    }
+    else if (stricmp(module, "ntdll.dll") == 0)
+    {
+        if (strcmp(funcName, "RtlTimeToTimeFields") == 0)
+        {
+            RtlTimeToTimeFieldsOrigFunc = (RtlTimeToTimeFields_t)originalFunc;
+            return (DWORD)RtlTimeToTimeFields_Hook;
+        }
+        if (strcmp(funcName, "NtQuerySystemTime") == 0)
+        {
+            NtQuerySystemTimeOrigFunc = (NtQuerySystemTime_t)originalFunc;
+            return (DWORD)NtQuerySystemTime_Hook;
+        }
+    }
+    else if (stricmp(module, "advapi32.dll") == 0)
+    {
+        if (strcmp(funcName, "RegQueryValueExA") == 0)
+        {
+            RegQueryValueExAOrigFunc = (RegQueryValueExA_t)originalFunc;
+            return (DWORD)RegQueryValueExA_Hook;
+        }
+        if (strcmp(funcName, "RegOpenKeyExA") == 0)
+        {
+            RegOpenKeyExAOrigFunc = (RegOpenKeyExA_t)originalFunc;
+            return (DWORD)RegOpenKeyExA_Hook;
+        }
+    }
+    else if (stricmp(module, "wintrust.dll") == 0)
+    {
+        if (strcmp(funcName, "WinVerifyTrust") == 0)
+        {
+            return (DWORD)WinVerifyTrust_Hook;
+        }
+    }
+
+    return (DWORD)originalFunc;
+}
+
+static BOOL HookExports(LPCSTR module, HMODULE hModule)
+{
+    BYTE* base = (BYTE*)hModule;
+
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE)
+    {
+        return FALSE;
+    }
+
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
+    {
+        return FALSE;
+    }
+
+    IMAGE_DATA_DIRECTORY expDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (expDir.VirtualAddress == 0)
+    {
+        return FALSE;
+    }
+
+    IMAGE_EXPORT_DIRECTORY* exports = (IMAGE_EXPORT_DIRECTORY*)(base + expDir.VirtualAddress);
+
+    DWORD* nameRVAs = (DWORD*)(base + exports->AddressOfNames);
+    WORD* ordinals = (WORD*)(base + exports->AddressOfNameOrdinals);
+    DWORD* funcRVAs = (DWORD*)(base + exports->AddressOfFunctions);
+
+    for (DWORD i = 0; i < exports->NumberOfNames; i++)
+    {
+        const char* name = (const char*)(base + nameRVAs[i]);
+        WORD ordinal = ordinals[i];
+        DWORD funcRVA = funcRVAs[ordinal];
+        BYTE* origFuncAddr = base + funcRVA;
+
+        DWORD oldProtect;
+        if (!VirtualProtect(&funcRVAs[ordinal], sizeof(DWORD), PAGE_READWRITE, &oldProtect))
+        {
+            return FALSE;
+        }
+
+        DWORD proc = GetProcAddressOrHooked(module, hModule, name);
+        BYTE* jmp = CreateJmpPatch();
+        *(DWORD*)(jmp + g_JmpAddressOffset) = proc;
+
+        funcRVAs[ordinal] = (DWORD)jmp - (DWORD)hModule;
+        VirtualProtect(&funcRVAs[ordinal], sizeof(DWORD), oldProtect, &oldProtect);
+    }
+
+    return FALSE;
+}
+
+static HMODULE g_FixedDlls[200];
+static int g_FixedDllsCount = 0;
+
+BOOL HasFixedDll(HMODULE hModule)
+{
+    for (int i = 0; i < g_FixedDllsCount; i++)
+    {
+        if (hModule == g_FixedDlls[i])
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+BOOL IsDllHookIgnored(LPCSTR module)
+{
+    // skip vsport and winsock on xp, it doesnt like exports hooking
+    return
+        StringIContains(module, "ws2") ||
+        StringIContains(module, "vsport");
+}
+
+typedef HMODULE(WINAPI* GetModuleHandleA_t)(LPCSTR);
+GetModuleHandleA_t GetModuleHandleAOrigFunc = NULL;
+
+typedef HMODULE(WINAPI* LoadLibraryA_t)(LPCSTR);
+LoadLibraryA_t LoadLibraryAOrigFunc = NULL;
+
+HMODULE WINAPI GetModuleHandleA_Hook(LPCSTR lpModuleName)
+{
+    if (lpModuleName)
+        LogToFile("GetModuleHandleA_Hook: %s", lpModuleName);
+
+    HMODULE hModule = GetModuleHandleAOrigFunc(lpModuleName);
+    if (lpModuleName && !hModule)
+    {
+        hModule = LoadLibraryAOrigFunc(lpModuleName);
+    }
+
+    if (lpModuleName && hModule && !IsDllHookIgnored(lpModuleName) && !HasFixedDll(hModule))
+    {
+        char* moduleName = new char[MAX_PATH];
+        strcpy(moduleName, lpModuleName);
+        g_FixedDlls[g_FixedDllsCount++] = hModule;
+        HookExports(lpModuleName, hModule);
+    }
+
+    return hModule;
+}
+
+typedef HRESULT(WINAPI *DllRegisterServer_t)();
+
+HMODULE WINAPI LoadLibraryA_Hook(LPCSTR lpLibFileName)
+{
+    if (lpLibFileName)
+        LogToFile("LoadLibraryA_Hook: %s", lpLibFileName);
+
+    HMODULE hModule = LoadLibraryAOrigFunc(lpLibFileName);
+    if (lpLibFileName && hModule && !IsDllHookIgnored(lpLibFileName) && !HasFixedDll(hModule))
+    {
+        char* moduleName = new char[MAX_PATH];
+        strcpy(moduleName, lpLibFileName);
+        g_FixedDlls[g_FixedDllsCount++] = hModule;
+        HookExports(lpLibFileName, hModule);
+    }
+
+    if (lpLibFileName && hModule && StringIContains(lpLibFileName, "vsport.dll"))
+    {
+        DllRegisterServer_t registerFunc = (DllRegisterServer_t)GetProcAddress(hModule, "DllRegisterServer");
+        registerFunc();
+    }
+
+    return hModule;
+}
+
+LPSTR GenerateGuid()
+{
+    char* buffer = new char[39];
+    buffer[0] = '{';
+    for (int i = 1; i < 37; i++)
+    {
+        if (i == 9 || i == 14 || i == 19 || i == 24)
+        {
+            buffer[i] = '-';
+            continue;
+        }
+
+        sprintf(buffer + i, "%x", rand() % 0x10);
+    }
+
+    buffer[37] = '}';
+    buffer[38] = '\0';
+    return buffer;
 }
 
 void InstallHooks()
 {
-    HMODULE hModule = GetModuleHandleA("ntdll.dll");
+    srand((unsigned int)time(NULL));
+    // cmd args should be unique guid on each run
+    g_CmdLineA = GenerateGuid();
+    g_CmdLineW = new wchar_t[100];
+    mbstowcs(g_CmdLineW, g_CmdLineA, 100);
 
-    FuncEntrySignature timeToTimeFieldBytes[] = {
-        {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
-    };
-    HookFunctionWithFallback(hModule, "RtlTimeToTimeFields", timeToTimeFieldBytes, sizeof(timeToTimeFieldBytes), (void**)&RtlTimeToTimeFieldsOrigFunc, (void*)RtlTimeToTimeFields_Hook);
-
-    FuncEntrySignature qtimeBytes[] = {
-        {{0xB8, 0xFF, 0xFF, 0xFF, 0xFF}, 5}
-    };
-    HookFunctionWithFallback(hModule, "NtQuerySystemTime", qtimeBytes, sizeof(qtimeBytes), (void**)&NtQuerySystemTimeOrigFunc, (void*)NtQuerySystemTime_Hook);
-
-    FuncEntrySignature entryBytes[] = {
-        {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
-    };
-
-    HookStatus status = {0};
-    hModule = GetModuleHandleA("kernelbase.dll");
-    if (hModule)
-    {
-        status.VirtualAlloc = HookFunctionWithFallbackSafe(hModule, "VirtualAlloc", entryBytes, sizeof(entryBytes),
-            (void**)&VirtualAllocOrigKBaseFunc, (void*)VirtualAlloc_KBaseHook, FALSE);
-        status.CreateFileA = HookFunctionWithFallbackSafe(hModule, "CreateFileA", entryBytes, sizeof(entryBytes),
-            (void**)&CreateFileAKBaseOrigFunc, (void*)CreateFileA_KBaseHook, FALSE);
-        
-        HookFunctionWithFallbackSafe(hModule, "GetVersionExA", entryBytes, sizeof(entryBytes), (void**)&GetVersionExAOrigFunc, (void*)GetVersionExA_Hook, FALSE);
-
-        HookKernelFunctions(hModule, &status, TRUE, FALSE);
-    }
-
-    hModule = GetModuleHandleA("kernel32.dll");
-    HookKernelFunctions(hModule, &status, FALSE, TRUE);
-    
-}
-
-void HookKernelFunctions(HMODULE hModule, HookStatus* status, BOOL skipFirst, BOOL errorOnFail)
-{
-    FuncEntrySignature entryBytes[] = {
-        {{0x8B, 0xFF, 0x55, 0x8B, 0xEC}, 5}
-    };
-    if (!skipFirst)
-    {
-        status->VirtualAlloc = HookFunctionWithFallbackSafe(hModule, "VirtualAlloc", entryBytes, sizeof(entryBytes),
-            (void**)&VirtualAllocOrigK32Func , (void*)VirtualAlloc_K32Hook, !status->VirtualAlloc && errorOnFail);
-        status->CreateFileA = HookFunctionWithFallbackSafe(hModule, "CreateFileA", entryBytes, sizeof(entryBytes),
-            (void**)&CreateFileAK32OrigFunc, (void*)CreateFileA_K32Hook, !status->CreateFileA && errorOnFail);
-    }
-
-    status->GetLocalTime = HookFunctionWithFallbackSafe(hModule, "GetLocalTime", entryBytes, sizeof(entryBytes), NULL,
-        (void*)GetLocalTime_Hook, !status->GetLocalTime && errorOnFail);
-    status->GetSystemTime = HookFunctionWithFallbackSafe(hModule, "GetSystemTime", entryBytes, sizeof(entryBytes), NULL,
-        (void*)GetSystemTime_Hook, !status->GetSystemTime && errorOnFail);
-    status->GetSystemTimeAsFileTime = HookFunctionWithFallbackSafe(hModule, "GetSystemTimeAsFileTime", entryBytes, sizeof(entryBytes),
-        NULL, (void*)GetSystemTimeAsFileTime_Hook, !status->GetSystemTimeAsFileTime && errorOnFail);
-    status->GlobalMemoryStatus = HookFunctionWithFallbackSafe(hModule, "GlobalMemoryStatus", entryBytes, sizeof(entryBytes),
-        NULL, (void*)GlobalMemoryStatus_Hook, !status->GlobalMemoryStatus && errorOnFail);
-}
-
-LONG DeleteRegistryTree(HKEY hRoot, LPCSTR subKey)
-{
-    HKEY hKey;
-    LONG status = RegOpenKeyExA(hRoot, subKey, 0, KEY_READ | KEY_WRITE, &hKey);
-
-    if (status != ERROR_SUCCESS)
-    {
-        return status;
-    }
-
-    char childName[256];
-    DWORD childLen;
-
-    while (TRUE)
-    {
-        childLen = sizeof(childName);
-        status = RegEnumKeyExA(hKey, 0, childName, &childLen, NULL, NULL, NULL, NULL);
-        if (status == ERROR_NO_MORE_ITEMS)
-        {
-            break;
-        }
-
-        if (status != ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-            return status;
-        }
-
-        status = DeleteRegistryTree(hKey, childName);
-        if (status != ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-            return status;
-        }
-    }
-
-    RegCloseKey(hKey);
-    return RegDeleteKeyA(hRoot, subKey);
+    g_IsOnNewerWindows = GetModuleHandleA("kernelbase.dll") != NULL;
+    EatHookFunction(GetModuleHandleA("kernel32.dll"), "LoadLibraryA", (void**)&LoadLibraryAOrigFunc, (void*)LoadLibraryA_Hook, TRUE);
+    EatHookFunction(GetModuleHandleA("kernel32.dll"), "GetModuleHandleA", (void**)&GetModuleHandleAOrigFunc, (void*)GetModuleHandleA_Hook, TRUE);
+    IatHookFunction("kernel32.dll", "LoadLibraryA", NULL, (void*)LoadLibraryA_Hook, TRUE);
+    IatHookFunction("kernel32.dll", "GetModuleHandleA", NULL, (void*)GetModuleHandleA_Hook, TRUE);
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
 {
     if (fdwReason == DLL_PROCESS_ATTACH)
     {
-        // sometimes app is stuck on startup, deleting registry helps
-        // moved to bat file
-        // DeleteRegistryTree(HKEY_CURRENT_USER, "Software\\mobileEx");
-
 		SetupWinmmFunctions();
         InstallHooks();
     }

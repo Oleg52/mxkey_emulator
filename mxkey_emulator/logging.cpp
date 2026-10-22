@@ -3,6 +3,7 @@
 #include <stdarg.h>
 
 // #define ENABLE_LOGS
+// #define ENABLE_TRANSMIT_LOGS
 
 const unsigned int MAX_BYTES_PER_LINE = 20;
 const char* DUMP_FILE_NAME = "C:\\dump_info.txt";
@@ -80,7 +81,7 @@ void LogBufferToFile(const char* opType, void* buffer, unsigned int length)
 
 void LogTransmitBuffersToFile(const BYTE* sendBuffer, unsigned int sendBufferLength, BYTE* recvBuffer, unsigned int recvBufferLength)
 {
-#ifdef ENABLE_LOGS
+#ifdef ENABLE_TRANSMIT_LOGS
     FILE* f = fopen(TRANSMIT_DUMP_FILE_NAME, "a");
     if (!f) return;
 
