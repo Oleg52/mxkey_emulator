@@ -117,6 +117,29 @@ BOOL WStringIContains(LPCWSTR str, LPCWSTR search)
     return FALSE;
 }
 
+BOOL BufferContainsString(BYTE* buffer, DWORD bufferLength, const char* search, DWORD searchLength)
+{
+    if (bufferLength < searchLength) return FALSE;
+    for (DWORD i = 0; i < bufferLength - searchLength; i++)
+    {
+        if (memcmp(buffer + i, search, searchLength) == 0)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+BOOL IsZeroBuffer(BYTE* InBuffer, DWORD length)
+{
+    for (DWORD i = 0; i < length; i++)
+    {
+        if (InBuffer[i] != 0) return FALSE;
+    }
+    return TRUE;
+}
+
 LONG WriteMultiStringA(const char* data, DWORD dataLen, LPSTR mszOut, LPDWORD pcchOut)
 {
     if (!pcchOut)
@@ -319,30 +342,40 @@ void PatchVmCheck()
 }
 
 // return missing ufs/jaf init code for rev 2.7
+// show atf box in devices list
 void PatchNokiaUfsJaf()
 {
     if (g_HasPatchedNokiaUfsJaf) return;
 
     BYTE* jmpToUfsRegionAddr = g_MobileExDllBase + 0x18BA65;
     BYTE* jmpToJafRegionAddr = g_MobileExDllBase + 0x18BAD5;
+    BYTE* jmpToAtfRegionAddr = g_MobileExDllBase + 0x1836D2;
 
     if (jmpToUfsRegionAddr[0] == 0xBA && jmpToUfsRegionAddr[1] == 0x3 &&
         jmpToJafRegionAddr[0] == 0xBA && jmpToJafRegionAddr[1] == 0x19)
     {
         BYTE* ufsRegionAddr = g_MobileExDllBase + 0x5820AC;
         BYTE* jafRegionAddr = g_MobileExDllBase + 0x5823DC;
+        BYTE* atfRegionAddr = g_MobileExDllBase + 0x5827FC;
 
         DWORD oldProtect;
         VirtualProtect(ufsRegionAddr, sizeof(UFS_REGION), PAGE_EXECUTE_READWRITE, &oldProtect);
         VirtualProtect(jafRegionAddr, sizeof(JAF_REGION), PAGE_EXECUTE_READWRITE, &oldProtect);
+        VirtualProtect(atfRegionAddr, sizeof(ATF_REGION), PAGE_EXECUTE_READWRITE, &oldProtect);
         memcpy(ufsRegionAddr, UFS_REGION, sizeof(UFS_REGION));
         memcpy(jafRegionAddr, JAF_REGION, sizeof(JAF_REGION));
+        memcpy(atfRegionAddr, ATF_REGION, sizeof(ATF_REGION));
 
         BYTE jmpToUfsRegion[] = {0xE9,0x42,0x66,0x3F,0x00};
         BYTE jmpToJafRegion[] = {0xE9,0x02,0x69,0x3F,0x00};
+        BYTE jmpToAtfRegion[] = {0xE9,0x25,0xF1,0x3F,0x00,0x90};
 
         memcpy(jmpToUfsRegionAddr, jmpToUfsRegion, sizeof(jmpToUfsRegion));
         memcpy(jmpToJafRegionAddr, jmpToJafRegion, sizeof(jmpToJafRegion));
+        memcpy(jmpToAtfRegionAddr, jmpToAtfRegion, sizeof(jmpToAtfRegion));
+
+        // allow atf in devices list
+        memset(g_MobileExDllBase + 0x183737, 0xE, 1);
 
         g_HasPatchedNokiaUfsJaf = TRUE;
     }
@@ -664,11 +697,15 @@ HANDLE WINAPI CreateFileA_Hook(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD d
 
     HANDLE result = CreateFileAOrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
         dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-    
-    //if (lpFileName && strcmp(lpFileName, "C:\\dump_info.txt") != 0)
-    //{
-    //    LogToFile("CreateFileA_Hook: %x : %s", result, lpFileName);
-    //}
+
+    /*if (lpFileName && strcmp(lpFileName, "C:\\dump_info.txt") != 0)
+    {
+        DWORD lastError = GetLastError();
+        LogToFile("CreateFileA_Hook: %x : %s", result, lpFileName);
+        LogToFile("CreateFileA_Hook: dwDesiredAccess: 0x%x, dwShareMode: %0x, dwCreationDisposition: 0x%x, dwFlagsAndAttributes: 0x%x", dwDesiredAccess, dwShareMode, dwCreationDisposition, dwFlagsAndAttributes);
+        LogToFile("Last Error: 0x%x", lastError);
+        SetLastError(lastError);
+    }*/
 
     return result;
 }
@@ -687,8 +724,13 @@ HANDLE WINAPI CreateFileW_Hook(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD 
 
     HANDLE result = CreateFileWOrigFunc(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
         dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-
+    
+    /*DWORD lastError = GetLastError();
     LogToFileW(L"CreateFileW_Hook: %x : %s", result, lpFileName);
+    LogToFile("CreateFileW_Hook: dwDesiredAccess: 0x%x, dwShareMode: %0x, dwCreationDisposition: 0x%x, dwFlagsAndAttributes: 0x%x", dwDesiredAccess, dwShareMode, dwCreationDisposition, dwFlagsAndAttributes);
+    LogToFile("Last Error: 0x%x", lastError);
+    SetLastError(lastError);*/
+
     return result;
 }
 
@@ -720,7 +762,7 @@ BOOL WINAPI ReadFile_Hook(
 )
 {
     BOOL result = ReadFileOrigFunc(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
-    if (nNumberOfBytesToRead < 1024)
+    if (result && lpBuffer && lpNumberOfBytesRead && *lpNumberOfBytesRead < 1024)
     {
         if (g_LastWriteBuffLength > 0)
         {
@@ -728,9 +770,9 @@ BOOL WINAPI ReadFile_Hook(
             g_LastWriteBuffLength = 0;
         }
 
-        LogBufferToFile("ReadFile", lpBuffer, nNumberOfBytesToRead);
+        LogBufferToFile("ReadFile", lpBuffer, *lpNumberOfBytesRead);
     }
-    
+
     return result;
 }
 
@@ -746,41 +788,18 @@ BOOL WINAPI WriteFile_Hook(
 )
 {
     BOOL result = WriteFileOrigFunc(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
-    if (lpBuffer && nNumberOfBytesToWrite < 1024)
+    if (result && lpBuffer && lpNumberOfBytesWritten && *lpNumberOfBytesWritten < 1024)
     {
-        memcpy(g_LastWriteBuff, lpBuffer, nNumberOfBytesToWrite);
-        g_LastWriteBuffLength = nNumberOfBytesToWrite;
+        memcpy(g_LastWriteBuff, lpBuffer, *lpNumberOfBytesWritten);
+        g_LastWriteBuffLength = *lpNumberOfBytesWritten;
     }
 
     return result;
 }
 
-BOOL IsZeroBuffer(BYTE* InBuffer, DWORD length)
-{
-    for (DWORD i = 0; i < length; i++)
-    {
-        if (InBuffer[i] != 0) return FALSE;
-    }
-    return TRUE;
-}
-
 static BOOL g_IsUsingUfsFtdiDrivers = FALSE;
 typedef BOOL (WINAPI *DeviceIoControl_t)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
 DeviceIoControl_t DeviceIoControlOrigFunc = NULL;
-
-BOOL IsBufferContainsString(BYTE* buffer, DWORD bufferLength, const char* search, DWORD searchLength)
-{
-    if (bufferLength < searchLength) return FALSE;
-    for (DWORD i = 0; i < bufferLength - searchLength; i++)
-    {
-        if (memcmp(buffer + i, search, searchLength) == 0)
-        {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
 
 BOOL WINAPI DeviceIoControl_Hook(
     HANDLE hDevice,
@@ -813,7 +832,7 @@ BOOL WINAPI DeviceIoControl_Hook(
 
         if (!result || *BytesReturned == 0) return FALSE;
         const char* sarasStr = "SarasSoft";
-        if (IsBufferContainsString((BYTE*)OutBuffer, *BytesReturned, sarasStr, sizeof(sarasStr)))
+        if (BufferContainsString((BYTE*)OutBuffer, *BytesReturned, sarasStr, strlen(sarasStr)))
         {
             g_IsUsingUfsFtdiDrivers = TRUE;
         }
@@ -828,23 +847,31 @@ BOOL WINAPI DeviceIoControl_Hook(
     return result;
 }
 
-const char KEY_PREFIX[] = "SYSTEM\\CurrentControlSet\\Enum\\USB\\";
+const char KEY_PREFIX[] = "SYSTEM\\CurrentControlSet\\Enum\\";
 const char GUID_DEVINTERFACE_USB_HUB[] = "{f18a0e88-c30c-11d0-8815-00a0c906bed8}";
 char g_LastDevice[MAX_PATH];
 
 typedef LONG (WINAPI *RegOpenKeyExA_t)(HKEY, LPCSTR, DWORD, REGSAM, PHKEY);
 RegOpenKeyExA_t RegOpenKeyExAOrigFunc = NULL;
 
+void UpdateLastDevicePath(LPCSTR lpSubKey)
+{
+    const char* lastSeparator = strrchr(lpSubKey, '\\');
+    const char* deviceStart = lpSubKey + sizeof(KEY_PREFIX) - 1;
+    int length = lastSeparator - deviceStart;
+    strncpy(g_LastDevice, deviceStart, length);
+    g_LastDevice[length] = '\0';
+}
+
 LONG WINAPI RegOpenKeyExA_Hook(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult)
 {
     LONG result = RegOpenKeyExAOrigFunc(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    if (result == 0 && lpSubKey && strlen(lpSubKey) > sizeof(KEY_PREFIX) && strnicmp(lpSubKey, KEY_PREFIX, sizeof(KEY_PREFIX) - 1) == 0)
+    if (result == 0 && lpSubKey &&
+        strlen(lpSubKey) > sizeof(KEY_PREFIX) &&
+        strnicmp(lpSubKey, KEY_PREFIX, sizeof(KEY_PREFIX) - 1) == 0 &&
+        StringIContains(lpSubKey, "Device Parameters"))
     {
-        const char* lastSeparator = strrchr(lpSubKey, '\\');
-        const char* deviceStart = lpSubKey + sizeof(KEY_PREFIX) - 5;
-        int length = lastSeparator - deviceStart;
-        strncpy(g_LastDevice, deviceStart, length);
-        g_LastDevice[length] = '\0';
+        UpdateLastDevicePath(lpSubKey);
     }
 
     LogToFile("RegOpenKeyExA_Hook: res 0x%x / %s", result, lpSubKey);
