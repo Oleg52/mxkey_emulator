@@ -9,6 +9,7 @@
 #include "emulator_helper.h"
 #include "save_helper.h"
 #include "buffers.h"
+#include "blackberry_crypto.h"
 
 void HookWinscardFunctions();
 
@@ -92,6 +93,7 @@ static BOOL g_HasHookedMobileExDll = FALSE;
 static BOOL g_HasPatchedVmCheck = FALSE;
 static BOOL g_HasPatchedNokiaUfsJaf = FALSE;
 static BOOL g_HasPatchedNokiaSaveRpl = FALSE;
+static BOOL g_HasPatchedBlackberry = FALSE;
 
 static BOOL g_CollectWinscardCandidates = FALSE;
 static BYTE* g_WinscardCandidates[50];
@@ -321,6 +323,106 @@ BOOL __stdcall GetOpenFileNameA_Hook(LPOPENFILENAMEA lpOpenFileName)
     return CustomGetOpenFileName(lpOpenFileName);
 }
 
+static void* g_LogToConsoleFunc;
+static BYTE g_LogBuffer[8 + 512];
+
+__declspec(naked) void LogToAppConsoleImpl(const char* str)
+{
+    __asm {
+        mov eax, dword ptr [esp+4]
+        xor edx, edx
+        xor ecx, ecx
+        call dword ptr [g_LogToConsoleFunc]
+        ret
+    }
+}
+
+void LogMepToAppConsole(const char* format, BYTE* code)
+{
+    strcpy((char*)(g_LogBuffer + 8), format);
+    int length = strlen((char*)(g_LogBuffer + 8));
+    for (int i = 0; i < 16; i++)
+    {
+        length += sprintf((char*)(g_LogBuffer + 8 + length), "%d", code[i]);
+    }
+
+    *(int*)(g_LogBuffer + 4) = length;
+    LogToFile((char*)(g_LogBuffer + 8));
+    LogToAppConsoleImpl((char*)(g_LogBuffer + 8));
+}
+
+void LogToAppConsole(const char* str)
+{
+    strcpy((char*)(g_LogBuffer + 8), str);
+    int length = strlen((char*)(g_LogBuffer + 8));
+    *(int*)(g_LogBuffer + 4) = length;
+    LogToFile((char*)(g_LogBuffer + 8));
+    LogToAppConsoleImpl((char*)(g_LogBuffer + 8));
+}
+
+void __cdecl CalculateMepsAndLog(const char* imei, const char* mep)
+{
+    LogToAppConsole("");
+
+    for (BYTE i = 0; i < 5 ; i++)
+    {
+        BYTE imeiAndMode[16];
+        memcpy(imeiAndMode, imei, 15);
+        imeiAndMode[15] = i;
+        BYTE result[20];
+        if (CalculateMep(mep, imeiAndMode, result))
+        {
+            switch (i)
+            {
+                case 0:
+                    LogMepToAppConsole(" MEP1 (SIM): #", result);
+                    break;
+                case 1:
+                    LogMepToAppConsole(" MEP2 (Network, Active): #", result);
+                    break;
+                case 2:
+                    LogMepToAppConsole(" MEP3 (Network Subset): #", result);
+                    break;
+                case 3:
+                    LogMepToAppConsole(" MEP4 (Service Provider): #", result);
+                    break;
+                case 4:
+                    LogMepToAppConsole(" MEP5 (Corporate): #", result);
+                    break;
+            }
+
+            continue;
+        }
+
+        LogToAppConsole(" #MEP not found!");
+        return;
+    }
+}
+
+void PatchBlackberryModule(BYTE* hModule)
+{
+    g_LogToConsoleFunc = hModule + 0xF80E0;
+    *(int*)(g_LogBuffer) = -1;
+
+    BYTE* patchAddr = hModule + 0x113310;
+    if (patchAddr[0] != 0xA1)
+    {
+        return;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(patchAddr, sizeof(BB_REGION), PAGE_EXECUTE_READWRITE, &oldProt);
+    memcpy(patchAddr, BB_REGION, sizeof(BB_REGION));
+    BYTE* callInstr = hModule + 0x113319;
+    *(DWORD*)(callInstr + 1) = (DWORD)CalculateMepsAndLog - ((DWORD)callInstr + 5);
+
+    // enable standalone mode
+    patchAddr = hModule + 0x11219D;
+    VirtualProtect(patchAddr, 2, PAGE_EXECUTE_READWRITE, &oldProt);
+    patchAddr[0] = 0x90;
+    patchAddr[1] = 0x90;
+}
+
 void PatchVmCheck()
 {
     if (g_HasPatchedVmCheck) return;
@@ -418,17 +520,27 @@ void PatchNokiaSaveRpl()
             break;
         }
 
-        if (memInfo.Type == MEM_PRIVATE && memInfo.Protect == PAGE_READWRITE) // find nokia module
+        if (memInfo.Type == MEM_PRIVATE && memInfo.Protect == PAGE_READWRITE) // find nokia/bb module
         {
             BOOL isNokiaModule = FALSE;
-            if (((IMAGE_DOS_HEADER*)addr)->e_magic == IMAGE_DOS_SIGNATURE &&
-                strcmp((char*)(addr + 0x568), "nk.mx") == 0)
+            BOOL isBlackberryModule = FALSE;
+            if (((IMAGE_DOS_HEADER*)addr)->e_magic == IMAGE_DOS_SIGNATURE)
             {
-                isNokiaModule = TRUE;
+                isNokiaModule = strcmp((char*)(addr + 0x568), "nk.mx") == 0;
+                isBlackberryModule = strcmp((char*)(addr + 0x568), "bb.mx") == 0;
             }
 
-            if (!isNokiaModule)
+            if (!isNokiaModule && !isBlackberryModule)
             {
+                addr += memInfo.RegionSize;
+                continue;
+            }
+
+            if (isBlackberryModule)
+            {
+                g_HasPatchedBlackberry = TRUE;
+                PatchBlackberryModule(addr);
+                if (g_HasPatchedNokiaSaveRpl) return;
                 addr += memInfo.RegionSize;
                 continue;
             }
@@ -469,7 +581,7 @@ void PatchNokiaSaveRpl()
                     msgBoxCheck[0] = 0xEB; // skip warning msg box
                 }
 
-                return;
+                if (g_HasPatchedBlackberry) return;
             }
         }
 
@@ -1079,8 +1191,9 @@ static BOOL HookExports(LPCSTR module, HMODULE hModule)
     {
         const char* name = (const char*)(base + nameRVAs[i]);
         WORD ordinal = ordinals[i];
-        DWORD funcRVA = funcRVAs[ordinal];
-        BYTE* origFuncAddr = base + funcRVA;
+
+        DWORD proc = GetProcAddressOrHooked(module, hModule, name);
+        if (proc == NULL) continue;
 
         DWORD oldProtect;
         if (!VirtualProtect(&funcRVAs[ordinal], sizeof(DWORD), PAGE_READWRITE, &oldProtect))
@@ -1088,7 +1201,6 @@ static BOOL HookExports(LPCSTR module, HMODULE hModule)
             return FALSE;
         }
 
-        DWORD proc = GetProcAddressOrHooked(module, hModule, name);
         BYTE* jmp = CreateJmpPatch();
         *(DWORD*)(jmp + g_JmpAddressOffset) = proc;
 

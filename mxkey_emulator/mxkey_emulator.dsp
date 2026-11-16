@@ -114,6 +114,10 @@ SOURCE=.\winmm_hook.cpp
 # PROP Default_Filter "h;hpp;hxx;hm;inl"
 # Begin Source File
 
+SOURCE=.\blackberry_crypto.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\buffers.h
 # End Source File
 # Begin Source File
